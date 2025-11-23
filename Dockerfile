@@ -19,4 +19,4 @@ ENV PORT=8000
 EXPOSE 8000
 
 # Use module invocation to avoid PATH issues
-CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "${PORT}"]
+CMD ["bash", "-lc", "python -m uvicorn app:app --host 0.0.0.0 --port ${PORT}"]
