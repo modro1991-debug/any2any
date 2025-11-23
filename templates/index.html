@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Any2Any — Free Online File Converter</title>
-<meta name="description" content="Convert images, videos, audio and documents online. Fast, private, and free. Files auto-delete after ~20 minutes.">
+<meta name="description" content="Convert images, videos, audio and documents online. Fast, private, and free. No tracking, no storage. Files auto-delete after conversion.">
 <style>
   :root{
     --bg:#0b1020;--panel:#0f1630;--card:#121a3a;--muted:#9ab0d6;
@@ -20,15 +20,15 @@
   .grid{display:grid;gap:16px;grid-template-columns:1fr; margin-top:18px}
   @media(min-width:900px){.grid{grid-template-columns:1.2fr .8fr}}
 
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+
   .drop{border:2px dashed var(--line);background:var(--card);border-radius:16px;padding:22px;display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center;transition:.2s}
   .drop.drag{border-color:var(--cta);box-shadow:0 0 0 3px rgba(42,102,255,.25) inset}
   .drop input{display:none}
   .drop .cta{display:inline-flex;align-items:center;gap:8px;background:var(--cta);border:none;padding:10px 14px;border-radius:12px;color:white;font-weight:600;cursor:pointer}
   .filemeta{margin-top:10px;font-size:14px;color:var(--muted)}
 
-  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
   .section-title{margin:0 0 8px 0;font-size:14px;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
-
   .chips{display:flex;flex-wrap:wrap;gap:8px}
   .chip{border:1px solid var(--line);background:#0b1020;padding:8px 12px;border-radius:999px;cursor:pointer;font-size:14px}
   .chip.active,.chip:hover{border-color:var(--cta);box-shadow:0 0 0 2px rgba(42,102,255,.25)}
@@ -36,27 +36,30 @@
   select,button{background:#0b1020;color:#e7ecf5;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
   button.convert{background:var(--cta);border:none;font-weight:600}
   button.convert:disabled{opacity:.6;cursor:not-allowed}
+
   details{margin-top:8px}
   details summary{cursor:pointer;color:var(--muted)}
+
   .progress{height:8px;background:#1a2448;border-radius:6px;overflow:hidden;margin-top:12px}
   .bar{height:8px;background:var(--cta);width:0%}
-  .notice{margin-top:10px;font-size:13px;color:var(--muted)}
   .result{margin-top:12px;font-size:14px}
   .pill{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:#0b1020}
   .pill.ok{background:#0f2f1a;border-color:#1d623a}
   .pill.err{background:#2f1010;border-color:#6a2a2a}
   a.link{color:#7fb2ff;text-decoration:none}
-  .footer{margin-top:18px;font-size:12px;color:var(--muted)}
+
+  .footer{margin-top:18px;font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .footer a{color:#7fb2ff;text-decoration:none}
 </style>
 </head>
 <body>
   <div class="wrap">
     <div class="hero">
       <h1>Any2Any File Converter</h1>
-      <div class="muted">Fast, private, and free. Files are auto-deleted after ~20 minutes.</div>
+      <div class="muted">Fast, private, and free. No cookies. No analytics. <strong>We never store your files</strong> — they are processed temporarily and auto-deleted after conversion.</div>
 
       <div class="grid">
-        <!-- Left: drop zone -->
+        <!-- Left: drop zone + progress/result -->
         <div class="panel">
           <div id="drop" class="drop" tabindex="0" aria-label="Drop file here">
             <div>
@@ -82,21 +85,17 @@
         <!-- Right: target selection -->
         <div class="panel">
           <div class="section-title">Target format</div>
-          <div id="chips" class="chips" aria-label="Suggested formats">
-            <!-- Quick chips injected by JS -->
-          </div>
+          <div id="chips" class="chips" aria-label="Suggested formats"></div>
 
           <details id="moreBox">
             <summary style="margin-top:10px">More formats</summary>
             <div class="row" style="margin-top:8px">
-              <select id="targetSelect" aria-label="All formats">
-                <!-- options injected by JS -->
-              </select>
+              <select id="targetSelect" aria-label="All formats"></select>
               <button id="convertBtn" class="convert" disabled>Convert</button>
             </div>
           </details>
 
-          <div class="notice">
+          <div class="muted" style="margin-top:10px">
             Tips: HEIC→JPG • DOCX→PDF • MP4→MP3 • PDF→DOCX<br/>
             Max file: <strong>50MB</strong> (configurable). No sign-up required.
           </div>
@@ -104,13 +103,155 @@
       </div>
 
       <div class="footer">
-        <span class="pill">Privacy: auto-delete</span>
-        <span class="pill">Rate limit to prevent abuse</span>
-        <span class="pill">Works on mobile & desktop</span>
+        <span>© 2025 Any2Any</span> ·
+        <a href="/privacy">Privacy</a> ·
+        <a href="/cookies">Cookies</a> ·
+        <span>Files auto-delete after ~20 minutes. We do not save files or personal data.</span>
       </div>
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <!-- App logic -->
+  <script>
+    // --- Helpers ---------------------------------------------------------------
+    const $ = (q) => document.querySelector(q);
+    const bar = $("#bar");
+    const drop = $("#drop");
+    const fileInput = $("#file");
+    const browseBtn = $("#browseBtn");
+    const filemeta = $("#filemeta");
+    const chipsWrap = $("#chips");
+    const targetSelect = $("#targetSelect");
+    const convertBtn = $("#convertBtn");
+    const resultBox = $("#result");
+
+    const IMAGE_IN = ["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"];
+    const AV_IN     = ["mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"];
+    const DOC_IN    = ["pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"];
+    const IMAGE_OUT = IMAGE_IN;
+    const AV_OUT    = AV_IN;
+    const DOC_OUT   = ["pdf","docx","xlsx","pptx","odt","ods","odp"];
+
+    function extOf(name){ const m = /\.[^.]+$/.exec(name||""); return m ? m[0].slice(1).toLowerCase() : ""; }
+    function humanSize(n){ if(!n && n!==0) return ""; const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++} return `${n.toFixed(n<10&&i?1:0)} ${u[i]}`; }
+
+    // Suggestions per category
+    const SUGGEST = {
+      image: ["jpg","png","webp","pdf"],
+      video: ["mp4","webm","mov","mp3"], // mp3 = extract audio
+      audio: ["mp3","wav","aac","flac"],
+      doc:   ["pdf","docx","pptx","xlsx"]
+    };
+
+    function guessCategory(ext){
+      if(IMAGE_IN.includes(ext)) return "image";
+      if(AV_IN.includes(ext)){
+        if(["mp4","mkv","mov","webm"].includes(ext)) return "video";
+        return "audio";
+      }
+      if(DOC_IN.includes(ext)) return "doc";
+      return "doc";
+    }
+
+    function allTargetsFor(cat){
+      if(cat==="image") return IMAGE_OUT;
+      if(cat==="video"||cat==="audio") return AV_OUT;
+      return DOC_OUT;
+    }
+
+    function setSuggestions(cat){
+      chipsWrap.innerHTML = "";
+      const opts = allTargetsFor(cat);
+      // populate <select> (all formats)
+      targetSelect.innerHTML = opts.map(o=>`<option value="${o}">${o.toUpperCase()}</option>`).join("");
+
+      // chips = top formats for that category
+      const top = (SUGGEST[cat] || []).filter(x => opts.includes(x));
+      top.forEach(fmt=>{
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "chip";
+        chip.textContent = fmt.toUpperCase();
+        chip.addEventListener("click", ()=>{
+          [...chipsWrap.querySelectorAll(".chip")].forEach(c=>c.classList.remove("active"));
+          chip.classList.add("active");
+          targetSelect.value = fmt;
+          convertBtn.disabled = !fileInput.files.length;
+        });
+        chipsWrap.appendChild(chip);
+      });
+
+      const first = chipsWrap.querySelector(".chip");
+      if(first){ first.click(); }
+    }
+
+    // --- Drag & drop -----------------------------------------------------------
+    ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {e.preventDefault(); drop.classList.add("drag");}));
+    ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => {e.preventDefault(); drop.classList.remove("drag");}));
+    drop.addEventListener("drop", (e)=>{
+      const f = e.dataTransfer.files?.[0];
+      if(f){ fileInput.files = e.dataTransfer.files; onFilePicked(f); }
+    });
+    browseBtn.addEventListener("click", ()=> fileInput.click());
+    fileInput.addEventListener("change", ()=> {
+      const f = fileInput.files?.[0];
+      if(f) onFilePicked(f);
+    });
+
+    function onFilePicked(file){
+      resultBox.innerHTML = "";
+      bar.style.width = "0%";
+      const ext = extOf(file.name);
+      const cat = guessCategory(ext);
+      setSuggestions(cat);
+      filemeta.textContent = `${file.name} — ${ext.toUpperCase()} • ${humanSize(file.size)}`;
+      convertBtn.disabled = false;
+    }
+
+    // --- Convert action --------------------------------------------------------
+    convertBtn.addEventListener("click", async ()=>{
+      const file = fileInput.files?.[0];
+      if(!file){ note("Please choose a file first.", true); return; }
+      const target = targetSelect.value;
+      if(!target){ note("Please choose a target format.", true); return; }
+
+      resultBox.innerHTML = "";
+      bar.style.width = "0%";
+
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("target", target);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/convert");
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable) bar.style.width = Math.round((ev.loaded / ev.total) * 100) + "%";
+      };
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status === 200) {
+              resultBox.innerHTML = `
+                <span class="pill ok">Done</span>
+                <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>`;
+            } else {
+              resultBox.innerHTML = `<span class="pill err">Error</span> ${escapeHtml(data.detail || xhr.responseText)}`;
+            }
+          } catch {
+            resultBox.textContent = xhr.responseText || "Unknown error";
+          }
+        }
+      };
+      xhr.send(fd);
+    });
+
+    function note(text, isErr=false){
+      resultBox.innerHTML = `<span class="pill ${isErr?'err':'ok'}">${isErr?'Error':'Note'}</span> ${escapeHtml(text)}`;
+    }
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    }
+  </script>
 </body>
 </html>
