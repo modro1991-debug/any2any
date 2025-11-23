@@ -6,7 +6,6 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-# Conversion helpers (images, AV, docs + data)
 from converters import (
     TMP_DIR, convert_image, convert_av, convert_doc,
     DATA_IN, DATA_OUT,
@@ -19,13 +18,11 @@ app = FastAPI(title="Any2Any Converter")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# --- Config ---
-MAX_SIZE_BYTES = int(os.getenv("MAX_SIZE_BYTES", 50 * 1024 * 1024))  # 50MB default
+MAX_SIZE_BYTES = int(os.getenv("MAX_SIZE_BYTES", 50 * 1024 * 1024))
 MAX_REQUESTS = int(os.getenv("MAX_REQUESTS_PER_10M", 30))
-WINDOW = 600  # seconds
-BUCKET = {}   # naive in-memory rate limit bucket
+WINDOW = 600
+BUCKET = {}
 
-# --- Allowed formats (must align with frontend) ---
 IMAGE_IN = {"jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"}
 IMAGE_OUT = IMAGE_IN
 AV_IN = {"mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"}
@@ -33,7 +30,6 @@ AV_OUT = AV_IN
 DOC_IN = {"pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"}
 DOC_OUT = {"pdf","docx","xlsx","pptx","odt","ods","odp"}
 
-# --- Helpers ---
 def _ip(request: Request) -> str:
     return request.headers.get("x-forwarded-for", request.client.host)
 
@@ -75,7 +71,6 @@ async def _save_upload(f: UploadFile, limit: int) -> Path:
     dest.chmod(0o600); dest.touch()
     return dest
 
-# --- Pages ---
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     _sweep_tmp()
@@ -89,7 +84,6 @@ async def privacy(request: Request):
 async def cookies(request: Request):
     return templates.TemplateResponse("cookies.html", {"request": request})
 
-# --- API ---
 @app.post("/api/convert")
 async def convert(request: Request,
                   file: UploadFile = File(...),
@@ -104,46 +98,42 @@ async def convert(request: Request,
     if not ext:
         raise HTTPException(400, "File must have an extension.")
 
-    # Prevent “same type” conversions (as requested)
+    # Block same-type conversions
     if target.lower().lstrip(".") == ext.lower():
-        raise HTTPException(400, "Target format matches source. Please choose a different format.")
+        raise HTTPException(400, "Target format matches source. Pick a different format.")
 
-    # Save to tmp
     src_path = await _save_upload(file, MAX_SIZE_BYTES)
-    t0 = time.time()  # start timing just before doing the work
+    t0 = time.time()
 
     try:
-        # Detect category if not provided
-        cat = category
-        if cat is None:
-            if ext in IMAGE_IN and target in IMAGE_OUT: cat = "image"
-            elif ext in AV_IN and target in AV_OUT:   cat = "av"
-            elif ext in DOC_IN and target in DOC_OUT: cat = "doc"
-            elif ext in DATA_IN and target in DATA_OUT: cat = "data"
+        if category is None:
+            if ext in IMAGE_IN and target in IMAGE_OUT: category = "image"
+            elif ext in AV_IN and target in AV_OUT:     category = "av"
+            elif ext in DOC_IN and target in DOC_OUT:   category = "doc"
+            elif ext in DATA_IN and target in DATA_OUT: category = "data"
             else:
-                if ext in IMAGE_IN: cat = "image"
-                elif ext in AV_IN: cat = "av"
-                elif ext in DOC_IN: cat = "doc"
-                elif ext in DATA_IN: cat = "data"
-                else: cat = "doc"
+                if   ext in IMAGE_IN: category = "image"
+                elif ext in AV_IN:    category = "av"
+                elif ext in DOC_IN:   category = "doc"
+                elif ext in DATA_IN:  category = "data"
+                else:                 category = "doc"
 
-        # Perform conversion
-        if cat == "image":
+        if category == "image":
             if ext not in IMAGE_IN or target not in IMAGE_OUT:
                 raise HTTPException(400, "Unsupported image conversion.")
             out_path = convert_image(src_path, target)
 
-        elif cat == "av":
+        elif category == "av":
             if ext not in AV_IN or target not in AV_OUT:
                 raise HTTPException(400, "Unsupported audio/video conversion.")
             out_path = convert_av(src_path, target)
 
-        elif cat == "doc":
+        elif category == "doc":
             if ext not in DOC_IN or target not in DOC_OUT:
                 raise HTTPException(400, "Unsupported document conversion.")
             out_path = convert_doc(src_path, target)
 
-        elif cat == "data":
+        elif category == "data":
             if ext not in DATA_IN or target not in DATA_OUT:
                 raise HTTPException(400, "Unsupported data conversion.")
             if target == "phonecsv":
