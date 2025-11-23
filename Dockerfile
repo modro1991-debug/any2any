@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# System deps for conversions (each item on its own line with a trailing backslash)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     imagemagick \
     ghostscript \
@@ -19,5 +18,5 @@ COPY . .
 ENV PORT=8000
 EXPOSE 8000
 
-# Start FastAPI (Render will set PORT)
-CMD ["bash", "-lc", "uvicorn app:app --host 0.0.0.0 --port ${PORT}"]
+# Use module invocation to avoid PATH issues
+CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "${PORT}"]
