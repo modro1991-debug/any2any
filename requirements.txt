@@ -1,4 +1,6 @@
-fastapi==0.115.5
-uvicorn[standard]==0.32.0
-python-multipart==0.0.9
-jinja2==3.1.4
+pandas==2.2.2
+openpyxl==3.1.5
+phonenumbers==8.13.45
+vobject==0.9.6.1
+PyYAML==6.0.2
+python-dateutil==2.9.0.post0
