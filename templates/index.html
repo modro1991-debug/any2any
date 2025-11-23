@@ -15,7 +15,7 @@
   .wrap{max-width:960px;margin:auto;padding:24px}
   .hero{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px}
   h1{margin:0 0 6px 0;font-size:28px;letter-spacing:.2px}
-  .muted{color:var(--muted);font-size:14px}
+  .muted{color:#9ab0d6;font-size:14px}
 
   .grid{display:grid;gap:16px;grid-template-columns:1fr; margin-top:18px}
   @media(min-width:900px){.grid{grid-template-columns:1.2fr .8fr}}
@@ -231,7 +231,8 @@
       xhr.onreadystatechange=()=>{ if(xhr.readyState===XMLHttpRequest.DONE){
         try{ const data=JSON.parse(xhr.responseText);
           if(xhr.status===200){
-            resultBox.innerHTML=`<span class="pill ok">Done</span> <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>`;
+            const t = data.process_time ? ` <span class="muted">(⏱ ${data.process_time}s)</span>` : "";
+            resultBox.innerHTML=`<span class="pill ok">Done</span> <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>${t}`;
           }else{
             resultBox.innerHTML=`<span class="pill err">Error</span> ${escapeHtml(data.detail||xhr.responseText)}`;
           }
@@ -262,8 +263,7 @@
     function onAccept(){
       setCookie('consent','accept', 180);
       cb.classList.remove('show'); cb.setAttribute('aria-hidden','true');
-      // If you ever add analytics, load them here AFTER consent:
-      // loadAnalytics();
+      // loadAnalytics(); // add optional analytics here AFTER consent
     }
     function onDecline(){
       cb.classList.remove('show'); cb.setAttribute('aria-hidden','true');
@@ -272,7 +272,7 @@
     btnD.addEventListener('click', onDecline);
     window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && cb.classList.contains('show')) onDecline(); });
     showBannerIfNeeded();
-    function loadAnalytics(){ /* add analytics tag here later */ }
+    function loadAnalytics(){ /* add optional analytics here if ever needed */ }
   </script>
 </body>
 </html>
