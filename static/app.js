@@ -13,6 +13,7 @@
   const barInd = $("#barInd");
   const statusLine = $("#status");
   const resultBox = $("#result");
+  const autoStart = $("#autoStart");
 
   // Supported formats (must align with backend)
   const IMAGE_IN = ["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"];
@@ -175,10 +176,30 @@
   });
 
   // File picker
-  fileInput.addEventListener("change", () => {
-    const f = fileInput.files?.[0];
-    if (f) onFilePicked(f);
-  });
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files?.[0];
+  if (!f) return;
+  onFilePicked(f);
+
+  // persist the toggle choice
+  if (autoStart) {
+    const want = !!autoStart.checked;
+    localStorage.setItem("a2a.autoStart", want ? "1" : "");
+    if (want) {
+      // give UI a tick to populate targets, then fire convert
+      setTimeout(() => {
+        // only click if the button is enabled and a target exists
+        if (!convertBtn.disabled && targetSelect.value) convertBtn.click();
+      }, 50);
+    }
+  }
+});
+
+// restore previous preference on load
+(function restorePref(){
+  const saved = localStorage.getItem("a2a.autoStart");
+  if (saved && autoStart) autoStart.checked = true;
+})();
 
   function onFilePicked(file){
     // reset UI
@@ -234,6 +255,22 @@
     fd.append("target", target);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/convert");
+
+    // These show network problems clearly in the UI
+    xhr.onerror = () => {
+      barInd.classList.remove("indeterminate");
+      barInd.style.display = "none";
+      resultBox.innerHTML = `<span class="pill err">Error</span> Network error while uploading. Check your internet or server.`;
+      statusLine.textContent = "";
+    };
+
+    xhr.onabort = () => {
+      barInd.classList.remove("indeterminate");
+      barInd.style.display = "none";
+      resultBox.innerHTML = `<span class="pill err">Cancelled</span> Upload was aborted.`;
+      statusLine.textContent = "";
+    };
+
 
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable){
