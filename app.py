@@ -25,7 +25,7 @@ MAX_REQUESTS = int(os.getenv("MAX_REQUESTS_PER_10M", 30))
 WINDOW = 600  # seconds
 BUCKET = {}   # naive in-memory rate limit bucket
 
-# --- Allowed formats ---
+# --- Allowed formats (must align with frontend) ---
 IMAGE_IN = {"jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"}
 IMAGE_OUT = IMAGE_IN
 AV_IN = {"mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"}
@@ -35,7 +35,6 @@ DOC_OUT = {"pdf","docx","xlsx","pptx","odt","ods","odp"}
 
 # --- Helpers ---
 def _ip(request: Request) -> str:
-    # Render/Reverse proxies set X-Forwarded-For
     return request.headers.get("x-forwarded-for", request.client.host)
 
 def _rate_limit(ip: str):
@@ -105,14 +104,16 @@ async def convert(request: Request,
     if not ext:
         raise HTTPException(400, "File must have an extension.")
 
-    # Save upload to tmp
-    src_path = await _save_upload(file, MAX_SIZE_BYTES)
+    # Prevent “same type” conversions (as requested)
+    if target.lower().lstrip(".") == ext.lower():
+        raise HTTPException(400, "Target format matches source. Please choose a different format.")
 
-    # ---- start timing just before conversion
-    t0 = time.time()
+    # Save to tmp
+    src_path = await _save_upload(file, MAX_SIZE_BYTES)
+    t0 = time.time()  # start timing just before doing the work
 
     try:
-        # detect category if not provided
+        # Detect category if not provided
         cat = category
         if cat is None:
             if ext in IMAGE_IN and target in IMAGE_OUT: cat = "image"
@@ -126,7 +127,7 @@ async def convert(request: Request,
                 elif ext in DATA_IN: cat = "data"
                 else: cat = "doc"
 
-        # do conversion
+        # Perform conversion
         if cat == "image":
             if ext not in IMAGE_IN or target not in IMAGE_OUT:
                 raise HTTPException(400, "Unsupported image conversion.")
@@ -168,10 +169,7 @@ async def convert(request: Request,
         else:
             raise HTTPException(400, "Unsupported category.")
 
-        # timing end
         elapsed = round(time.time() - t0, 2)
-
-        # GDPR NOTE: we never store files anywhere; only temp processing; auto-swept.
         return JSONResponse({
             "download": f"/download/{out_path.name}",
             "filename": out_path.name,
