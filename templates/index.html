@@ -12,12 +12,18 @@
   h1{margin:0 0 6px 0;font-size:28px} .muted{color:var(--muted);font-size:14px}
   .grid{display:grid;gap:16px;grid-template-columns:1fr;margin-top:18px} @media(min-width:900px){.grid{grid-template-columns:1.2fr .8fr}}
   .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
-  .drop{border:2px dashed var(--line);background:var(--card);border-radius:16px;padding:22px;display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center;transition:.2s}
-  .drop.drag{border-color:var(--cta);box-shadow:0 0 0 3px rgba(42,102,255,.25) inset} .drop input{display:none}
-  .drop .cta{display:inline-flex;align-items:center;gap:8px;background:var(--cta);border:none;padding:10px 14px;border-radius:12px;color:white;font-weight:600;cursor:pointer}
+
+  .drop{position:relative;border:2px dashed var(--line);background:var(--card);border-radius:16px;padding:22px;display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center;transition:.2s}
+  .drop.drag{border-color:var(--cta);box-shadow:0 0 0 3px rgba(42,102,255,.25) inset}
+  /* keep input focusable but off-screen (avoid display:none for browser quirks) */
+  #file{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
+  .cta{display:inline-flex;align-items:center;gap:8px;background:var(--cta);border:none;padding:10px 14px;border-radius:12px;color:white;font-weight:600;cursor:pointer}
   .filemeta{margin-top:10px;font-size:14px;color:var(--muted)}
+  label[for="file"]{display:inline-block}
+
   .section-title{margin:0 0 8px 0;font-size:14px;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
-  .chips{display:flex;flex-wrap:wrap;gap:8px} .chip{border:1px solid var(--line);background:#0b1020;padding:8px 12px;border-radius:999px;cursor:pointer;font-size:14px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{border:1px solid var(--line);background:#0b1020;padding:8px 12px;border-radius:999px;cursor:pointer;font-size:14px}
   .chip.active,.chip:hover{border-color:var(--cta);box-shadow:0 0 0 2px rgba(42,102,255,.25)}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
   select,button{background:#0b1020;color:#e7ecf5;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
@@ -56,10 +62,11 @@
               </svg>
               <div style="font-weight:600;margin-bottom:6px;">Drag & drop a file</div>
               <div class="muted">or</div><br/>
-              <!-- replace the old label+button block inside #drop with this -->
+
+              <!-- Robust label+input + JS fallback -->
+              <input id="file" type="file" />
               <label for="file">
-                <input id="file" type="file" hidden />
-                <button class="cta" type="button" aria-controls="file">Choose file</button>
+                <button id="browseBtn" class="cta" type="button" aria-controls="file">Choose file</button>
               </label>
 
               <div id="filemeta" class="filemeta" aria-live="polite"></div>
@@ -111,35 +118,41 @@
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
   <script>
+  (function(){
     const $ = (q)=>document.querySelector(q);
     const bar=$("#bar"), barInd=$("#barInd"), drop=$("#drop"), fileInput=$("#file"), browseBtn=$("#browseBtn");
     const filemeta=$("#filemeta"), chipsWrap=$("#chips"), targetSelect=$("#targetSelect"), convertBtn=$("#convertBtn");
     const resultBox=$("#result"), statusLine=$("#status"), localToggle=$("#localToggle");
 
+    // --- Add both triggers for max compatibility ---
+    if (browseBtn) {
+      browseBtn.addEventListener("click", (e)=>{
+        // fallback click in case label-for is interfered by CSS/overlays
+        e.preventDefault();
+        if (fileInput) fileInput.click();
+      });
+    }
+
+    // Handle change
+    fileInput.addEventListener("change", ()=>{ const f=fileInput.files?.[0]; if(f) onFilePicked(f); });
+
+    // Drag & drop
+    ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); drop.classList.add("drag");}));
+    ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); drop.classList.remove("drag");}));
+    drop.addEventListener("drop", e=>{ const f=e.dataTransfer.files?.[0]; if(f){ fileInput.files=e.dataTransfer.files; onFilePicked(f);} });
+
     const IMAGE_IN=["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"];
     const AV_IN   =["mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"];
     const DOC_IN  =["pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"];
     const DATA_IN =["csv","xlsx","txt","vcf","srt","vtt","json","yaml","yml"];
-
-    const IMAGE_OUT=IMAGE_IN;
-    const AV_OUT=AV_IN;
-    const DOC_OUT=["pdf","docx","pptx","xlsx","odt","odp","ods"];
+    const IMAGE_OUT=IMAGE_IN; const AV_OUT=AV_IN; const DOC_OUT=["pdf","docx","pptx","xlsx","odt","odp","ods"];
     const DATA_OUT=["phonecsv","csv","vcf","srt","vtt","csv_from_json","json_from_csv","json_from_yaml","yaml_from_json"];
 
-    const PDFJS = window['pdfjsLib'];  // from CDN
-    PDFJS.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.js";
+    const PDFJS = window['pdfjsLib']; PDFJS.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.js";
 
     function extOf(name){const m=/\.[^.]+$/.exec(name||"");return m?m[0].slice(1).toLowerCase():"";}
     function humanSize(n){if(!n&&n!==0)return"";const u=["B","KB","MB","GB"];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return`${n.toFixed(n<10&&i?1:0)} ${u[i]}`;}
-
-    function guessCategory(ext){
-      if(ext==="pdf") return "doc"; // let DOCX appear and also allow PDF->images in local mode
-      if(IMAGE_IN.includes(ext)) return "image";
-      if(AV_IN.includes(ext)) return ["mp4","mkv","mov","webm"].includes(ext)?"video":"audio";
-      if(DOC_IN.includes(ext)) return "doc";
-      if(DATA_IN.includes(ext)) return "data";
-      return "doc";
-    }
+    function guessCategory(ext){ if(ext==="pdf") return "doc"; if(IMAGE_IN.includes(ext)) return "image"; if(AV_IN.includes(ext)) return ["mp4","mkv","mov","webm"].includes(ext)?"video":"audio"; if(DOC_IN.includes(ext)) return "doc"; if(DATA_IN.includes(ext)) return "data"; return "doc"; }
 
     function suggestedTargets(ext, cat){
       if(ext==="pdf") return ["jpg","png","webp","docx"];
@@ -151,10 +164,7 @@
       return [];
     }
     function allTargetsFor(ext, cat){
-      if(ext==="pdf"){
-        const imgs=IMAGE_OUT.filter(x=>x!=="pdf");
-        return [...new Set([...imgs, "docx"])];
-      }
+      if(ext==="pdf"){ const imgs=IMAGE_OUT.filter(x=>x!=="pdf"); return [...new Set([...imgs, "docx"])]; }
       if(cat==="image") return IMAGE_OUT.filter(x=>x!==ext);
       if(cat==="video"||cat==="audio") return AV_OUT.filter(x=>x!==ext);
       if(cat==="data") return DATA_OUT;
@@ -174,16 +184,8 @@
         });
         chipsWrap.appendChild(chip);
       });
-      const first=chipsWrap.querySelector(".chip");
-      if(first){ first.click(); } else { convertBtn.disabled=!fileInput.files.length; }
+      const first=chipsWrap.querySelector(".chip"); if(first){ first.click(); } else { convertBtn.disabled=!fileInput.files.length; }
     }
-
-    // drag/drop
-    ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("drag");}));
-    ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("drag");}));
-    drop.addEventListener("drop", e=>{ const f=e.dataTransfer.files?.[0]; if(f){ fileInput.files=e.dataTransfer.files; onFilePicked(f);} });
-    $("#browseBtn").addEventListener("click", ()=> fileInput.click());
-    fileInput.addEventListener("change", ()=>{ const f=fileInput.files?.[0]; if(f) onFilePicked(f); });
 
     function onFilePicked(file){
       resultBox.innerHTML=""; statusLine.textContent=""; bar.style.width="0%"; barInd.style.display="none"; barInd.classList.remove("indeterminate");
@@ -193,48 +195,28 @@
       convertBtn.disabled=false;
     }
 
-    // ---------------- Local processing support --------------------------------
-    const LOCAL_OK = {
-      // sourceExt: Set of targetExts supported locally
-      "pdf": new Set(["jpg","png","webp"]),      // all pages -> zip
-      "jpg": new Set(["png","webp","pdf"]),
-      "jpeg": new Set(["png","webp","pdf"]),
-      "png": new Set(["jpg","webp","pdf"]),
-      "webp": new Set(["jpg","png","pdf"]),
-      "bmp": new Set(["jpg","png","webp","pdf"]),
-      "gif": new Set(["jpg","png","webp","pdf"]),
-      "tiff": new Set(["jpg","png","webp","pdf"]),
-      "ico": new Set(["png","webp","pdf"])
-    };
-
-    function canDoLocal(srcExt, targetExt){
-      return LOCAL_OK[srcExt]?.has(targetExt) || false;
-    }
+    // Local processing map
+    const LOCAL_OK = { "pdf": new Set(["jpg","png","webp"]), "jpg": new Set(["png","webp"]), "jpeg": new Set(["png","webp"]), "png": new Set(["jpg","webp"]), "webp": new Set(["jpg","png"]), "bmp": new Set(["jpg","png","webp"]), "gif": new Set(["jpg","png","webp"]), "tiff": new Set(["jpg","png","webp"]), "ico": new Set(["png","webp"]) };
+    function canDoLocal(srcExt, targetExt){ return LOCAL_OK[srcExt]?.has(targetExt) || false; }
 
     async function convertLocal(file, srcExt, targetExt){
-      // PDF -> images (all pages) -> ZIP
       if(srcExt==="pdf" && ["jpg","png","webp"].includes(targetExt)){
         statusLine.textContent="Preparing PDF…";
         const buf = await file.arrayBuffer();
         const pdf = await PDFJS.getDocument({ data: buf }).promise;
         const pages = pdf.numPages;
-        const zip = new JSZip();
-        let done = 0;
-
+        const zip = new JSZip(); let done = 0;
         for(let i=1;i<=pages;i++){
           const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 2 }); // good quality
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement("canvas"); const ctx = canvas.getContext("2d");
           canvas.width = viewport.width; canvas.height = viewport.height;
           await page.render({ canvasContext: ctx, viewport }).promise;
           const mime = {jpg:"image/jpeg", png:"image/png", webp:"image/webp"}[targetExt];
           const blob = await new Promise(res=>canvas.toBlob(res, mime, mime==="image/jpeg"?0.92:0.95));
           zip.file(`page-${i}.${targetExt}`, blob);
-          done++;
-          const pct = Math.round((done/pages)*100);
-          bar.style.width = pct+"%";
-          statusLine.textContent = `Processing… ${pct}% (${done}/${pages})`;
+          bar.style.width = Math.round((++done/pages)*100) + "%";
+          statusLine.textContent = `Processing… ${done}/${pages}`;
         }
         const zipBlob = await zip.generateAsync({type:"blob"});
         const url = URL.createObjectURL(zipBlob);
@@ -242,46 +224,29 @@
         return { url, filename: name, local: true };
       }
 
-      // Image -> image/pdf
       if(["jpg","jpeg","png","webp","gif","tiff","bmp","ico"].includes(srcExt) &&
-         ["jpg","png","webp","pdf"].includes(targetExt)){
-        statusLine.textContent="Decoding image… 10%";
+         ["jpg","png","webp"].includes(targetExt)){
+        statusLine.textContent="Decoding image…";
         const bitmap = await createImageBitmap(file);
-        bar.style.width="20%";
-        statusLine.textContent="Drawing… 40%";
-        const canvas = document.createElement("canvas");
-        canvas.width = bitmap.width; canvas.height = bitmap.height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(bitmap, 0, 0);
+        bar.style.width="30%";
+        const canvas = document.createElement("canvas"); const ctx = canvas.getContext("2d");
+        canvas.width = bitmap.width; canvas.height = bitmap.height; ctx.drawImage(bitmap, 0, 0);
         bar.style.width="60%";
-
-        if(targetExt==="pdf"){
-          // simple single-page PDF with image (canvas to data URL; embed via PDFkit would need bundling; use browser print-to-pdf fallback)
-          // Instead, export as PNG and name .pdf? Not correct. So for local mode, we won't fake PDF; we fallback to server for image->PDF.
-          throw new Error("image->PDF not supported locally");
-        } else {
-          const mime = {jpg:"image/jpeg", png:"image/png", webp:"image/webp"}[targetExt];
-          const blob = await new Promise(res=>canvas.toBlob(res, mime, mime==="image/jpeg"?0.92:0.95));
-          bar.style.width="90%";
-          statusLine.textContent="Packaging… 90%";
-          const url = URL.createObjectURL(blob);
-          const base = file.name.replace(/\.[^.]+$/,"");
-          const name = `${base}.${targetExt}`;
-          bar.style.width="100%";
-          statusLine.textContent="Done.";
-          return { url, filename: name, local: true };
-        }
+        const mime = {jpg:"image/jpeg", png:"image/png", webp:"image/webp"}[targetExt];
+        const blob = await new Promise(res=>canvas.toBlob(res, mime, mime==="image/jpeg"?0.92:0.95));
+        bar.style.width="100%"; statusLine.textContent="Done.";
+        const url = URL.createObjectURL(blob); const base = file.name.replace(/\.[^.]+$/,"");
+        return { url, filename: `${base}.${targetExt}`, local: true };
       }
 
       throw new Error("Local conversion not supported for this format.");
     }
 
-    // ---------------- Convert button ------------------------------------------
+    // Convert button
     convertBtn.addEventListener("click", async ()=>{
       const file=fileInput.files?.[0]; if(!file){ note("Please choose a file first.", true); return; }
       const target=targetSelect.value; if(!target){ note("Please choose a target format.", true); return; }
       const srcExt = extOf(file.name);
-
       resultBox.innerHTML=""; statusLine.textContent=""; bar.style.width="0%"; barInd.style.display="none"; barInd.classList.remove("indeterminate");
 
       if(localToggle.checked && canDoLocal(srcExt, target)){
@@ -291,28 +256,22 @@
           const elapsed = ((performance.now()-t0)/1000).toFixed(2);
           resultBox.innerHTML = `<span class="pill ok">Done</span> <a class="link" href="${out.url}" download="${out.filename}">Download ${escapeHtml(out.filename)}</a> <span class="muted">(⏱ ${elapsed}s)</span>`;
           return;
-        }catch(err){
-          // Fall back to server if local failed
-          console.warn("Local conversion failed, falling back:", err);
-        }
+        }catch(err){ console.warn("Local conversion failed, falling back:", err); }
       }
 
-      // ---- Server path (existing behavior) ----
+      // server fallback
       statusLine.textContent="Uploading…";
       const fd=new FormData(); fd.append("file", file); fd.append("target", target);
       const xhr=new XMLHttpRequest(); xhr.open("POST","/api/convert");
-
       xhr.upload.onprogress=(ev)=>{ if(ev.lengthComputable){ bar.style.width=Math.round((ev.loaded/ev.total)*100)+"%"; } };
       xhr.upload.onload=()=>{ bar.style.width="100%"; statusLine.textContent="Processing…"; barInd.style.display="block"; barInd.classList.add("indeterminate"); };
-
       xhr.onreadystatechange=()=>{ if(xhr.readyState===XMLHttpRequest.DONE){
         barInd.classList.remove("indeterminate"); barInd.style.display="none";
         if(xhr.status===200){
-          try{
-            const data=JSON.parse(xhr.responseText);
-            const t=data.process_time?` <span class="muted">(⏱ ${data.process_time}s)</span>`:"";
-            statusLine.textContent="Done.";
-            resultBox.innerHTML=`<span class="pill ok">Done</span> <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>${t}`;
+          try{ const data=JSON.parse(xhr.responseText);
+               const t=data.process_time?` <span class="muted">(⏱ ${data.process_time}s)</span>`:"";
+               statusLine.textContent="Done.";
+               resultBox.innerHTML=`<span class="pill ok">Done</span> <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>${t}`;
           }catch{ statusLine.textContent="Done."; resultBox.textContent="Download ready."; }
         }else{
           try{ const data=JSON.parse(xhr.responseText);
@@ -326,7 +285,7 @@
     function note(t,err=false){ resultBox.innerHTML=`<span class="pill ${err?'err':'ok'}">${err?'Error':'Note'}</span> ${escapeHtml(t)}`; }
     function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
-    // cookie banner
+    // Cookie banner
     const cb=document.getElementById('cookieBanner'), btnA=document.getElementById('cookieAccept'), btnD=document.getElementById('cookieDecline');
     function setCookie(n,v,d){const maxAge=d*24*60*60;document.cookie=`${n}=${encodeURIComponent(v)}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;}
     function getCookie(n){return document.cookie.split(';').map(s=>s.trim()).find(s=>s.startsWith(n+'='))?.split('=')[1];}
@@ -335,6 +294,7 @@
     btnD.addEventListener('click',()=>{cb.classList.remove('show');cb.setAttribute('aria-hidden','true');});
     window.addEventListener('keydown',(e)=>{if(e.key==='Escape'&&cb.classList.contains('show')) btnD.click();});
     showBannerIfNeeded();
+  })();
   </script>
 </body>
 </html>
