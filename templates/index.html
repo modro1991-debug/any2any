@@ -1,0 +1,42 @@
+<!doctype html><html><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Any2Any File Converter</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#0b1020;color:#e7ecf5}
+.wrap{max-width:780px;margin:40px auto;padding:24px;background:#0f1630;border:1px solid #1f2a4a;border-radius:16px}
+h1{margin:0 0 8px 0;font-size:28px}.muted{opacity:.85}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.card{background:#121a3a;padding:16px;border-radius:12px;border:1px dashed #2a3a6a}
+select,input[type=file],button{background:#0b1020;color:#e7ecf5;border:1px solid #2a3a6a;border-radius:10px;padding:10px 12px}
+button{cursor:pointer;background:#2a66ff;border:none}.progress{height:8px;background:#1a2448;border-radius:6px;overflow:hidden;margin-top:12px}
+.bar{height:8px;background:#2a66ff;width:0%}.pill{padding:4px 8px;background:#0b1020;border:1px solid #2a3a6a;border-radius:999px;font-size:12px}
+.success{background:#0f2f1a;border-color:#286a3a}.error{background:#2f1010;border-color:#6a2a2a}
+.footer{margin-top:24px;font-size:12px;opacity:.7} a{color:#7fb2ff}
+</style>
+</head><body>
+<div class="wrap">
+  <h1>Any2Any File Converter</h1>
+  <p class="muted">Convert images, videos, audio, and documents. Files are auto-deleted after ~20 minutes.</p>
+  <div class="card">
+    <form id="form" class="row">
+      <div><label>File</label><br/><input id="file" type="file" required/></div>
+      <div><label>Target</label><br/>
+        <select id="target" required>
+          <optgroup label="Images"><option>jpg</option><option>png</option><option>webp</option><option>gif</option><option>pdf</option></optgroup>
+          <optgroup label="Audio / Video"><option>mp3</option><option>wav</option><option>aac</option><option>flac</option><option>mp4</option><option>mkv</option><option>mov</option><option>webm</option></optgroup>
+          <optgroup label="Documents"><option>pdf</option><option>docx</option><option>pptx</option><option>xlsx</option><option>odt</option><option>odp</option><option>ods</option></optgroup>
+        </select>
+      </div>
+      <div><label>&nbsp;</label><br/><button type="submit">Convert</button></div>
+    </form>
+    <div class="progress"><div id="bar" class="bar"></div></div>
+    <div id="msg" style="margin-top:12px;"></div>
+  </div>
+  <div class="footer">
+    <span class="pill">Max 50MB (configurable)</span>
+    <span class="pill">Free beta</span>
+    <span class="pill">Privacy: auto-delete</span>
+  </div>
+</div>
+<script src="/static/app.js"></script>
+</body></html>
