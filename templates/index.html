@@ -22,6 +22,7 @@
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
   select,button{background:#0b1020;color:#e7ecf5;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
   button.convert{background:var(--cta);border:none;font-weight:600} button.convert:disabled{opacity:.6;cursor:not-allowed}
+
   .progress{height:8px;background:#1a2448;border-radius:6px;overflow:hidden;margin-top:12px;position:relative}
   .bar{height:8px;background:var(--cta);width:0%}
   .bar.indeterminate{position:absolute;left:0;top:0;width:100%;height:8px;background:linear-gradient(90deg, rgba(42,102,255,0) 0%, rgba(42,102,255,.6) 50%, rgba(42,102,255,0) 100%);background-size:200% 100%;animation:slide 1.2s linear infinite}
@@ -30,10 +31,12 @@
   .result{margin-top:12px;font-size:14px} .pill{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:#0b1020}
   .pill.ok{background:#0f2f1a;border-color:#1d623a} .pill.err{background:#2f1010;border-color:#6a2a2a} a.link{color:#7fb2ff;text-decoration:none}
   .footer{margin-top:18px;font-size:12px;color:#9ab0d6;display:flex;gap:10px;flex-wrap:wrap;align-items:center} .footer a{color:#7fb2ff;text-decoration:none}
+
   .cookie-banner{position:fixed;left:12px;right:12px;bottom:12px;z-index:50;background:#121a3a;border:1px solid #1f2a4a;color:#e7ecf5;border-radius:14px;padding:12px 14px;display:none;box-shadow:0 8px 24px rgba(0,0,0,.35)}
   .cookie-banner.show{display:flex;align-items:center;gap:12px;flex-wrap:wrap} .cookie-banner p{margin:0;font-size:14px;color:#9ab0d6}
   .cookie-actions{margin-left:auto;display:flex;gap:8px} .cookie-btn{border:1px solid #1f2a4a;background:#0b1020;color:#e7ecf5;padding:8px 12px;border-radius:10px;cursor:pointer}
   .cookie-btn.primary{background:#2a66ff;border:none;font-weight:600} .cookie-btn:focus{outline:2px solid #5ea1ff;outline-offset:2px}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:#9ab0d6;margin-top:8px}
 </style>
 </head>
 <body>
@@ -71,6 +74,10 @@
             <select id="targetSelect" aria-label="All formats"></select>
             <button id="convertBtn" class="convert" disabled>Convert</button>
           </div>
+          <label class="toggle">
+            <input id="localToggle" type="checkbox"/>
+            Process in my browser (beta) — faster & private for images/PDF→images
+          </label>
 
           <div class="muted" style="margin-top:10px">
             Tips: <strong>PDF→JPG/PNG/WEBP/DOCX</strong> • HEIC→JPG • DOCX→PDF • MP4→MP3 • VCF⇄CSV • SRT⇄VTT
@@ -94,11 +101,15 @@
     </div>
   </div>
 
+  <!-- JS libs for local conversion -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
   <script>
     const $ = (q)=>document.querySelector(q);
     const bar=$("#bar"), barInd=$("#barInd"), drop=$("#drop"), fileInput=$("#file"), browseBtn=$("#browseBtn");
     const filemeta=$("#filemeta"), chipsWrap=$("#chips"), targetSelect=$("#targetSelect"), convertBtn=$("#convertBtn");
-    const resultBox=$("#result"), statusLine=$("#status");
+    const resultBox=$("#result"), statusLine=$("#status"), localToggle=$("#localToggle");
 
     const IMAGE_IN=["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"];
     const AV_IN   =["mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"];
@@ -110,11 +121,14 @@
     const DOC_OUT=["pdf","docx","pptx","xlsx","odt","odp","ods"];
     const DATA_OUT=["phonecsv","csv","vcf","srt","vtt","csv_from_json","json_from_csv","json_from_yaml","yaml_from_json"];
 
+    const PDFJS = window['pdfjsLib'];  // from CDN
+    PDFJS.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.js";
+
     function extOf(name){const m=/\.[^.]+$/.exec(name||"");return m?m[0].slice(1).toLowerCase():"";}
     function humanSize(n){if(!n&&n!==0)return"";const u=["B","KB","MB","GB"];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return`${n.toFixed(n<10&&i?1:0)} ${u[i]}`;}
 
     function guessCategory(ext){
-      if(ext==="pdf") return "doc"; // treat PDF as document so DOCX is offered
+      if(ext==="pdf") return "doc"; // let DOCX appear and also allow PDF->images in local mode
       if(IMAGE_IN.includes(ext)) return "image";
       if(AV_IN.includes(ext)) return ["mp4","mkv","mov","webm"].includes(ext)?"video":"audio";
       if(DOC_IN.includes(ext)) return "doc";
@@ -122,9 +136,8 @@
       return "doc";
     }
 
-    // curated chips
     function suggestedTargets(ext, cat){
-      if(ext==="pdf") return ["jpg","png","webp","docx"]; // key ask
+      if(ext==="pdf") return ["jpg","png","webp","docx"];
       if(cat==="image")  return ["jpg","png","webp","pdf"].filter(x=>x!==ext);
       if(cat==="video")  return ["mp4","webm","mp3"];
       if(cat==="audio")  return ["mp3","wav","aac","flac"].filter(x=>x!==ext);
@@ -132,10 +145,8 @@
       if(cat==="data")   return ["phonecsv","csv","vcf","vtt","srt","csv_from_json","json_from_csv"];
       return [];
     }
-
-    // full list for select
     function allTargetsFor(ext, cat){
-      if(ext==="pdf"){ // combine images + DOCX, exclude same
+      if(ext==="pdf"){
         const imgs=IMAGE_OUT.filter(x=>x!=="pdf");
         return [...new Set([...imgs, "docx"])];
       }
@@ -144,12 +155,10 @@
       if(cat==="data") return DATA_OUT;
       return DOC_OUT.filter(x=>x!==ext);
     }
-
     function setSuggestions(ext, cat){
       chipsWrap.innerHTML="";
       const opts = allTargetsFor(ext, cat);
       targetSelect.innerHTML = opts.map(o=>`<option value="${o}">${o.toUpperCase()}</option>`).join("");
-
       const top = suggestedTargets(ext, cat).filter(x=>opts.includes(x));
       top.forEach(fmt=>{
         const chip=document.createElement("button");
@@ -179,11 +188,112 @@
       convertBtn.disabled=false;
     }
 
-    convertBtn.addEventListener("click", ()=>{
+    // ---------------- Local processing support --------------------------------
+    const LOCAL_OK = {
+      // sourceExt: Set of targetExts supported locally
+      "pdf": new Set(["jpg","png","webp"]),      // all pages -> zip
+      "jpg": new Set(["png","webp","pdf"]),
+      "jpeg": new Set(["png","webp","pdf"]),
+      "png": new Set(["jpg","webp","pdf"]),
+      "webp": new Set(["jpg","png","pdf"]),
+      "bmp": new Set(["jpg","png","webp","pdf"]),
+      "gif": new Set(["jpg","png","webp","pdf"]),
+      "tiff": new Set(["jpg","png","webp","pdf"]),
+      "ico": new Set(["png","webp","pdf"])
+    };
+
+    function canDoLocal(srcExt, targetExt){
+      return LOCAL_OK[srcExt]?.has(targetExt) || false;
+    }
+
+    async function convertLocal(file, srcExt, targetExt){
+      // PDF -> images (all pages) -> ZIP
+      if(srcExt==="pdf" && ["jpg","png","webp"].includes(targetExt)){
+        statusLine.textContent="Preparing PDF…";
+        const buf = await file.arrayBuffer();
+        const pdf = await PDFJS.getDocument({ data: buf }).promise;
+        const pages = pdf.numPages;
+        const zip = new JSZip();
+        let done = 0;
+
+        for(let i=1;i<=pages;i++){
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 2 }); // good quality
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          const mime = {jpg:"image/jpeg", png:"image/png", webp:"image/webp"}[targetExt];
+          const blob = await new Promise(res=>canvas.toBlob(res, mime, mime==="image/jpeg"?0.92:0.95));
+          zip.file(`page-${i}.${targetExt}`, blob);
+          done++;
+          const pct = Math.round((done/pages)*100);
+          bar.style.width = pct+"%";
+          statusLine.textContent = `Processing… ${pct}% (${done}/${pages})`;
+        }
+        const zipBlob = await zip.generateAsync({type:"blob"});
+        const url = URL.createObjectURL(zipBlob);
+        const name = file.name.replace(/\.pdf$/i, `_${targetExt}.zip`);
+        return { url, filename: name, local: true };
+      }
+
+      // Image -> image/pdf
+      if(["jpg","jpeg","png","webp","gif","tiff","bmp","ico"].includes(srcExt) &&
+         ["jpg","png","webp","pdf"].includes(targetExt)){
+        statusLine.textContent="Decoding image… 10%";
+        const bitmap = await createImageBitmap(file);
+        bar.style.width="20%";
+        statusLine.textContent="Drawing… 40%";
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0);
+        bar.style.width="60%";
+
+        if(targetExt==="pdf"){
+          // simple single-page PDF with image (canvas to data URL; embed via PDFkit would need bundling; use browser print-to-pdf fallback)
+          // Instead, export as PNG and name .pdf? Not correct. So for local mode, we won't fake PDF; we fallback to server for image->PDF.
+          throw new Error("image->PDF not supported locally");
+        } else {
+          const mime = {jpg:"image/jpeg", png:"image/png", webp:"image/webp"}[targetExt];
+          const blob = await new Promise(res=>canvas.toBlob(res, mime, mime==="image/jpeg"?0.92:0.95));
+          bar.style.width="90%";
+          statusLine.textContent="Packaging… 90%";
+          const url = URL.createObjectURL(blob);
+          const base = file.name.replace(/\.[^.]+$/,"");
+          const name = `${base}.${targetExt}`;
+          bar.style.width="100%";
+          statusLine.textContent="Done.";
+          return { url, filename: name, local: true };
+        }
+      }
+
+      throw new Error("Local conversion not supported for this format.");
+    }
+
+    // ---------------- Convert button ------------------------------------------
+    convertBtn.addEventListener("click", async ()=>{
       const file=fileInput.files?.[0]; if(!file){ note("Please choose a file first.", true); return; }
       const target=targetSelect.value; if(!target){ note("Please choose a target format.", true); return; }
-      resultBox.innerHTML=""; statusLine.textContent="Uploading…"; bar.style.width="0%"; barInd.style.display="none"; barInd.classList.remove("indeterminate");
+      const srcExt = extOf(file.name);
 
+      resultBox.innerHTML=""; statusLine.textContent=""; bar.style.width="0%"; barInd.style.display="none"; barInd.classList.remove("indeterminate");
+
+      if(localToggle.checked && canDoLocal(srcExt, target)){
+        try{
+          const t0=performance.now();
+          const out = await convertLocal(file, srcExt, target);
+          const elapsed = ((performance.now()-t0)/1000).toFixed(2);
+          resultBox.innerHTML = `<span class="pill ok">Done</span> <a class="link" href="${out.url}" download="${out.filename}">Download ${escapeHtml(out.filename)}</a> <span class="muted">(⏱ ${elapsed}s)</span>`;
+          return;
+        }catch(err){
+          // Fall back to server if local failed
+          console.warn("Local conversion failed, falling back:", err);
+        }
+      }
+
+      // ---- Server path (existing behavior) ----
+      statusLine.textContent="Uploading…";
       const fd=new FormData(); fd.append("file", file); fd.append("target", target);
       const xhr=new XMLHttpRequest(); xhr.open("POST","/api/convert");
 
