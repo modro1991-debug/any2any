@@ -98,7 +98,6 @@ async def convert(request: Request,
     if not ext:
         raise HTTPException(400, "File must have an extension.")
 
-    # Block same-type conversions
     if target.lower().lstrip(".") == ext.lower():
         raise HTTPException(400, "Target format matches source. Pick a different format.")
 
