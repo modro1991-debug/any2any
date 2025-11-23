@@ -6,8 +6,15 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-# uses the converters module you already added
-from converters import TMP_DIR, convert_image, convert_av, convert_doc
+# Conversion helpers (images, AV, docs)
+from converters import (
+    TMP_DIR, convert_image, convert_av, convert_doc,
+    # Data converters (optional, but recommended)
+    DATA_IN, DATA_OUT,
+    data_phone_clean, data_vcf_to_csv, data_csv_to_vcf,
+    data_srt_to_vtt, data_vtt_to_srt,
+    data_json_to_csv, data_csv_to_json, data_yaml_to_json, data_json_to_yaml
+)
 
 app = FastAPI(title="Any2Any Converter")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -27,20 +34,15 @@ AV_OUT = AV_IN
 DOC_IN = {"pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"}
 DOC_OUT = {"pdf","docx","xlsx","pptx","odt","ods","odp"}
 
-# NEW:
-from converters import DATA_IN, DATA_OUT
-
-
 # --- Helpers ---
 def _ip(request: Request) -> str:
-    # Render/Reverse proxies set X-Forwarded-For
     return request.headers.get("x-forwarded-for", request.client.host)
 
 def _rate_limit(ip: str):
     now = time.time()
-    window_start = now - WINDOW
+    start = now - WINDOW
     BUCKET.setdefault(ip, [])
-    BUCKET[ip] = [t for t in BUCKET[ip] if t >= window_start]
+    BUCKET[ip] = [t for t in BUCKET[ip] if t >= start]
     if len(BUCKET[ip]) >= MAX_REQUESTS:
         raise HTTPException(429, "Too many requests, please try again later.")
     BUCKET[ip].append(now)
@@ -82,12 +84,12 @@ async def index(request: Request):
 
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy(request: Request):
-    # ensure you created templates/privacy.html (we provided earlier)
+    # Create templates/privacy.html (we provided earlier)
     return templates.TemplateResponse("privacy.html", {"request": request})
 
 @app.get("/cookies", response_class=HTMLResponse)
 async def cookies(request: Request):
-    # ensure you created templates/cookies.html (we provided earlier)
+    # Create templates/cookies.html (we provided earlier)
     return templates.TemplateResponse("cookies.html", {"request": request})
 
 # --- API ---
@@ -113,29 +115,60 @@ async def convert(request: Request,
             if ext in IMAGE_IN and target in IMAGE_OUT: cat = "image"
             elif ext in AV_IN and target in AV_OUT:   cat = "av"
             elif ext in DOC_IN and target in DOC_OUT: cat = "doc"
+            elif ext in DATA_IN and target in DATA_OUT: cat = "data"
             else:
-                # guess best-effort
                 if ext in IMAGE_IN: cat = "image"
                 elif ext in AV_IN: cat = "av"
+                elif ext in DOC_IN: cat = "doc"
+                elif ext in DATA_IN: cat = "data"
                 else: cat = "doc"
 
         if cat == "image":
             if ext not in IMAGE_IN or target not in IMAGE_OUT:
                 raise HTTPException(400, "Unsupported image conversion.")
             out_path = convert_image(src_path, target)
+
         elif cat == "av":
             if ext not in AV_IN or target not in AV_OUT:
                 raise HTTPException(400, "Unsupported audio/video conversion.")
             out_path = convert_av(src_path, target)
+
         elif cat == "doc":
             if ext not in DOC_IN or target not in DOC_OUT:
                 raise HTTPException(400, "Unsupported document conversion.")
             out_path = convert_doc(src_path, target)
+
+        elif cat == "data":
+            if ext not in DATA_IN or target not in DATA_OUT:
+                raise HTTPException(400, "Unsupported data conversion.")
+            # Route data conversions
+            if target == "phonecsv":
+                out_path = data_phone_clean(src_path, default_region=None)
+            elif target == "csv" and ext == "vcf":
+                out_path = data_vcf_to_csv(src_path)
+            elif target == "vcf" and ext == "csv":
+                out_path = data_csv_to_vcf(src_path)
+            elif target == "vtt" and ext == "srt":
+                out_path = data_srt_to_vtt(src_path)
+            elif target == "srt" and ext == "vtt":
+                out_path = data_vtt_to_srt(src_path)
+            elif target == "csv_from_json" and ext == "json":
+                out_path = data_json_to_csv(src_path)
+            elif target == "json_from_csv" and ext == "csv":
+                out_path = data_csv_to_json(src_path)
+            elif target == "json_from_yaml" and ext in {"yaml","yml"}:
+                out_path = data_yaml_to_json(src_path)
+            elif target == "yaml_from_json" and ext == "json":
+                out_path = data_json_to_yaml(src_path)
+            else:
+                raise HTTPException(400, "Unsupported data conversion pairing.")
+
         else:
             raise HTTPException(400, "Unsupported category.")
 
-        # NOTE (GDPR): we do NOT store files anywhere. Only temp processing; auto-swept.
+        # GDPR NOTE: we never store files anywhere; only temp processing; auto-swept.
         return JSONResponse({"download": f"/download/{out_path.name}", "filename": out_path.name})
+
     except HTTPException:
         raise
     except Exception as e:
@@ -146,5 +179,4 @@ async def download(fname: str):
     p = TMP_DIR / fname
     if not p.exists():
         raise HTTPException(404, "File not found or expired.")
-    # File lives only briefly in tmp; we do not persist anything.
     return FileResponse(str(p), filename=fname)
