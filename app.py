@@ -6,10 +6,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-# Conversion helpers (images, AV, docs)
+# Conversion helpers (images, AV, docs + data)
 from converters import (
     TMP_DIR, convert_image, convert_av, convert_doc,
-    # Data converters (optional, but recommended)
     DATA_IN, DATA_OUT,
     data_phone_clean, data_vcf_to_csv, data_csv_to_vcf,
     data_srt_to_vtt, data_vtt_to_srt,
@@ -21,7 +20,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 # --- Config ---
-MAX_SIZE_BYTES = int(os.getenv("MAX_SIZE_BYTES", 50 * 1024 * 1024))  # 50MB
+MAX_SIZE_BYTES = int(os.getenv("MAX_SIZE_BYTES", 50 * 1024 * 1024))  # 50MB default
 MAX_REQUESTS = int(os.getenv("MAX_REQUESTS_PER_10M", 30))
 WINDOW = 600  # seconds
 BUCKET = {}   # naive in-memory rate limit bucket
@@ -36,6 +35,7 @@ DOC_OUT = {"pdf","docx","xlsx","pptx","odt","ods","odp"}
 
 # --- Helpers ---
 def _ip(request: Request) -> str:
+    # Render/Reverse proxies set X-Forwarded-For
     return request.headers.get("x-forwarded-for", request.client.host)
 
 def _rate_limit(ip: str):
@@ -84,12 +84,10 @@ async def index(request: Request):
 
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy(request: Request):
-    # Create templates/privacy.html (we provided earlier)
     return templates.TemplateResponse("privacy.html", {"request": request})
 
 @app.get("/cookies", response_class=HTMLResponse)
 async def cookies(request: Request):
-    # Create templates/cookies.html (we provided earlier)
     return templates.TemplateResponse("cookies.html", {"request": request})
 
 # --- API ---
@@ -107,7 +105,12 @@ async def convert(request: Request,
     if not ext:
         raise HTTPException(400, "File must have an extension.")
 
+    # Save upload to tmp
     src_path = await _save_upload(file, MAX_SIZE_BYTES)
+
+    # ---- start timing just before conversion
+    t0 = time.time()
+
     try:
         # detect category if not provided
         cat = category
@@ -123,6 +126,7 @@ async def convert(request: Request,
                 elif ext in DATA_IN: cat = "data"
                 else: cat = "doc"
 
+        # do conversion
         if cat == "image":
             if ext not in IMAGE_IN or target not in IMAGE_OUT:
                 raise HTTPException(400, "Unsupported image conversion.")
@@ -141,7 +145,6 @@ async def convert(request: Request,
         elif cat == "data":
             if ext not in DATA_IN or target not in DATA_OUT:
                 raise HTTPException(400, "Unsupported data conversion.")
-            # Route data conversions
             if target == "phonecsv":
                 out_path = data_phone_clean(src_path, default_region=None)
             elif target == "csv" and ext == "vcf":
@@ -162,12 +165,18 @@ async def convert(request: Request,
                 out_path = data_json_to_yaml(src_path)
             else:
                 raise HTTPException(400, "Unsupported data conversion pairing.")
-
         else:
             raise HTTPException(400, "Unsupported category.")
 
+        # timing end
+        elapsed = round(time.time() - t0, 2)
+
         # GDPR NOTE: we never store files anywhere; only temp processing; auto-swept.
-        return JSONResponse({"download": f"/download/{out_path.name}", "filename": out_path.name})
+        return JSONResponse({
+            "download": f"/download/{out_path.name}",
+            "filename": out_path.name,
+            "process_time": elapsed
+        })
 
     except HTTPException:
         raise
