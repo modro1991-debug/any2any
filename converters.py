@@ -1,4 +1,3 @@
-# --- ADD near the top with the other imports ---
 import os
 import io
 import re
@@ -7,24 +6,94 @@ import json
 import yaml
 import shutil
 import subprocess
-import pandas as pd
-import phonenumbers
-import vobject
 from pathlib import Path
 from typing import Literal
 
-# ------------- DATA CONVERTERS (unique features) -----------------
+import pandas as pd
+import phonenumbers
+import vobject
+
+# ---------- temp workspace ----------
+BASE_DIR = Path(__file__).parent.resolve()
+TMP_DIR = BASE_DIR / "tmp"
+TMP_DIR.mkdir(exist_ok=True)
+
+# ---------- external tools ----------
+IM_CMD = os.getenv("IMAGEMAGICK_CONVERT", "convert")   # ImageMagick
+FFMPEG = os.getenv("FFMPEG", "ffmpeg")                 # FFmpeg
+LIBRE = os.getenv("LIBREOFFICE", "libreoffice")        # LibreOffice
+
+# ---------- small helpers ----------
+def run(cmd: list[str]) -> None:
+    """Run a command and raise a readable error on failure."""
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{e.stderr.decode(errors='ignore')}") from None
+
+def change_ext(p: Path, new_ext: str) -> Path:
+    return p.with_suffix("." + new_ext.lstrip("."))
+
+# ============================================================================
+#                            BINARY CONVERTERS
+# ============================================================================
+
+# ---- Images (and PDF -> image via Ghostscript under ImageMagick) ----
+ImageFormat = Literal["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"]
+
+def convert_image(inp: Path, target_ext: ImageFormat) -> Path:
+    outp = change_ext(inp, target_ext)
+    # If source is PDF and target is raster, render with a nicer density
+    if inp.suffix.lower() == ".pdf" and target_ext.lower() not in (".pdf","pdf"):
+        run([IM_CMD, "-density", "150", str(inp), "-strip", str(outp)])
+    else:
+        run([IM_CMD, str(inp), "-strip", str(outp)])
+    return outp
+
+# ---- Audio/Video via FFmpeg ----
+AVFormat = Literal["mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"]
+
+def convert_av(inp: Path, target_ext: AVFormat) -> Path:
+    outp = change_ext(inp, target_ext)
+    # stream copy for some common container-only changes; otherwise re-encode defaults
+    # Keep it simple and robust:
+    run([FFMPEG, "-y", "-i", str(inp), str(outp)])
+    return outp
+
+# ---- Documents via LibreOffice headless ----
+DocOut = Literal["pdf","docx","xlsx","pptx","odt","ods","odp"]
+
+def convert_doc(inp: Path, target_ext: DocOut) -> Path:
+    # LibreOffice exports to a dir; we then rename/move to our tmp name.
+    out_dir = TMP_DIR
+    # Map to LO filter names when necessary (mostly not needed, LO infers)
+    run([
+        LIBRE, "--headless", "--convert-to", target_ext,
+        "--outdir", str(out_dir), str(inp)
+    ])
+    produced = change_ext(out_dir / inp.name, target_ext)
+    if not produced.exists():
+        # LO sometimes uses uppercase/lowercase or different base naming; search
+        candidates = list(out_dir.glob(f"*{'.'+target_ext}"))
+        if not candidates:
+            raise RuntimeError("LibreOffice did not produce an output file.")
+        produced = candidates[0]
+    final = change_ext(inp, target_ext)
+    if produced != final:
+        produced.replace(final)
+    return final
+
+# ============================================================================
+#                           DATA CONVERTERS (UNIQUE)
+# ============================================================================
 
 DATA_IN = {"csv","xlsx","txt","vcf","srt","vtt","json","yaml","yml"}
 DATA_OUT = {
-    # phone list cleaner (outputs CSV)
-    "phonecsv",
-    # contacts
-    "vcf","csv",
-    # subtitles
-    "srt","vtt",
-    # structured data
-    "json","csv_from_json","json_from_csv","yaml","json_from_yaml","yaml_from_json"
+    "phonecsv",        # phone number cleaning (CSV output)
+    "vcf","csv",       # contacts
+    "srt","vtt",       # subtitles
+    "json","csv_from_json","json_from_csv",
+    "yaml","json_from_yaml","yaml_from_json"
 }
 
 def _read_text(p: Path) -> str:
@@ -36,10 +105,9 @@ def _write_text(p: Path, s: str):
 def _change_to(p: Path, new_ext: str) -> Path:
     return p.with_suffix("." + new_ext)
 
-# ---- 2.1 Phone number cleaner: CSV/XLSX/TXT -> cleaned CSV
-# Heuristics: search for phone-like tokens in any column; normalize to E.164; dedupe
+# ---- 1) Phone list cleaner: CSV/XLSX/TXT -> cleaned CSV ----
 def data_phone_clean(inp: Path, default_region: str | None = None) -> Path:
-    # Load to dataframe (best-effort)
+    # Load into DataFrame best-effort
     if inp.suffix.lower() == ".xlsx":
         df = pd.read_excel(inp, dtype=str)
     elif inp.suffix.lower() == ".csv":
@@ -50,7 +118,6 @@ def data_phone_clean(inp: Path, default_region: str | None = None) -> Path:
         raise RuntimeError("Phone cleaner expects CSV/XLSX/TXT")
 
     numbers = []
-    cols = list(df.columns)
     rows = df.fillna("").astype(str).to_dict("records")
     for row in rows:
         for val in row.values():
@@ -65,12 +132,11 @@ def data_phone_clean(inp: Path, default_region: str | None = None) -> Path:
                     "type": _phone_type(parsed) if parsed else "",
                 })
 
-    # dedupe by e164 (keep first non-empty)
-    seen = set()
-    cleaned = []
+    # dedupe by e164 (or original if parsing failed)
+    seen, cleaned = set(), []
     for r in numbers:
         key = r["e164"] or r["original"]
-        if key in seen: 
+        if key in seen:
             continue
         seen.add(key)
         cleaned.append(r)
@@ -80,15 +146,12 @@ def data_phone_clean(inp: Path, default_region: str | None = None) -> Path:
     return outp
 
 def _extract_phone_like_tokens(s: str):
-    # very light heuristic: sequences of digits/+/( )/-
-    import re
-    candidates = re.findall(r"[+()\- \d]{6,}", s)
-    # strip spaces and obvious junk
+    # sequences of digits/+/( )/- of length≥6
+    candidates = re.findall(r"[+()\- \d]{6,}", s or "")
     return [c.strip() for c in candidates if len(re.sub(r"\D", "", c)) >= 6]
 
 def _try_parse_phone(s: str, default_region: str | None):
     try:
-        # If starts with +, region is ignored; else use default_region if given
         num = phonenumbers.parse(s, default_region if not s.strip().startswith("+") else None)
         if phonenumbers.is_possible_number(num) and phonenumbers.is_valid_number(num):
             return num
@@ -108,16 +171,14 @@ def _phone_type(num) -> str:
         PhoneNumberType.PREMIUM_RATE: "premium",
     }.get(t, "other")
 
-# ---- 2.2 Contacts: VCF <-> CSV
+# ---- 2) Contacts: VCF <-> CSV ----
 def data_vcf_to_csv(inp: Path) -> Path:
     text = _read_text(inp)
     cards = list(vobject.readComponents(text))
     rows = []
     for card in cards:
         name = getattr(card, "fn", None).value if hasattr(card, "fn") else ""
-        # Gather phones/emails
-        phones = []
-        emails = []
+        phones, emails = [], []
         for c in getattr(card, "contents", {}).values():
             for item in c:
                 try:
@@ -128,42 +189,38 @@ def data_vcf_to_csv(inp: Path) -> Path:
                 except Exception:
                     pass
         rows.append({"name": name, "phones": "; ".join(phones), "emails": "; ".join(emails)})
-
     outp = _change_to(inp, "csv")
     pd.DataFrame(rows).to_csv(outp, index=False)
     return outp
 
 def data_csv_to_vcf(inp: Path) -> Path:
     df = pd.read_csv(inp, dtype=str, keep_default_na=False, na_filter=False)
-    vcf_parts = []
+    parts = []
     for _, r in df.fillna("").iterrows():
         card = vobject.vCard()
         if r.get("name"):
             card.add("fn").value = r["name"]
-        # split multi-values by ; or , 
+        # split by ; or ,
         for col, kind in (("phones","TEL"), ("phone","TEL"), ("emails","EMAIL"), ("email","EMAIL")):
             val = (r.get(col) or "").strip()
-            if not val: 
+            if not val:
                 continue
-            for piece in [p.strip() for p in re_split_multi(val)]:
+            for piece in re.split(r"[;,]", val):
+                piece = piece.strip()
+                if not piece:
+                    continue
                 try:
                     card.add(kind.lower()).value = piece
                 except Exception:
                     pass
-        vcf_parts.append(card.serialize())
+        parts.append(card.serialize())
     outp = _change_to(inp, "vcf")
-    _write_text(outp, "".join(vcf_parts))
+    _write_text(outp, "".join(parts))
     return outp
 
-def re_split_multi(s: str):
-    import re
-    return re.split(r"[;,]", s)
-
-# ---- 2.3 Subtitles: SRT <-> VTT
+# ---- 3) Subtitles: SRT <-> VTT ----
 def data_srt_to_vtt(inp: Path) -> Path:
     s = _read_text(inp)
-    # replace comma in timestamps with dot, add WEBVTT header
-    import re
     s = "WEBVTT\n\n" + re.sub(r"(\d{2}:\d{2}:\d{2}),(\d{3})", r"\1.\2", s)
     outp = _change_to(inp, "vtt")
     _write_text(outp, s)
@@ -171,12 +228,9 @@ def data_srt_to_vtt(inp: Path) -> Path:
 
 def data_vtt_to_srt(inp: Path) -> Path:
     s = _read_text(inp)
-    import re
     s = re.sub(r"^WEBVTT[^\n]*\n+\s*", "", s, flags=re.IGNORECASE)
     s = re.sub(r"(\d{2}:\d{2}:\d{2})\.(\d{3})", r"\1,\2", s)
-    # Add sequence numbers if missing
-    lines = []
-    seq = 1
+    lines, seq = [], 1
     for block in s.strip().split("\n\n"):
         if "-->" in block and not block.strip().splitlines()[0].isdigit():
             block = f"{seq}\n{block}"
@@ -187,11 +241,11 @@ def data_vtt_to_srt(inp: Path) -> Path:
     _write_text(outp, out)
     return outp
 
-# ---- 2.4 JSON/CSV/YAML conversions
+# ---- 4) JSON/CSV/YAML bridges ----
 def data_json_to_csv(inp: Path) -> Path:
     data = json.loads(_read_text(inp) or "[]")
     outp = _change_to(inp, "csv")
-    if isinstance(data, dict):  # wrap single dict
+    if isinstance(data, dict):
         data = [data]
     pd.DataFrame(data).to_csv(outp, index=False)
     return outp
