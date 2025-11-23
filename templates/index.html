@@ -39,8 +39,21 @@
   details{margin-top:8px}
   details summary{cursor:pointer;color:var(--muted)}
 
-  .progress{height:8px;background:#1a2448;border-radius:6px;overflow:hidden;margin-top:12px}
+  .progress{height:8px;background:#1a2448;border-radius:6px;overflow:hidden;margin-top:12px; position:relative}
   .bar{height:8px;background:var(--cta);width:0%}
+  /* Indeterminate animation while server processes */
+  .bar.indeterminate{
+    position:absolute; left:0; top:0; width:100%; height:8px;
+    background: linear-gradient(90deg, rgba(42,102,255,0) 0%, rgba(42,102,255,.6) 50%, rgba(42,102,255,0) 100%);
+    background-size: 200% 100%;
+    animation: slide 1.2s linear infinite;
+  }
+  @keyframes slide{
+    0%{background-position: 200% 0}
+    100%{background-position: -200% 0}
+  }
+
+  .statusline{margin-top:6px;font-size:13px;color:#9ab0d6}
   .result{margin-top:12px;font-size:14px}
   .pill{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:#0b1020}
   .pill.ok{background:#0f2f1a;border-color:#1d623a}
@@ -91,7 +104,11 @@
             </div>
           </div>
 
-          <div class="progress"><div id="bar" class="bar"></div></div>
+          <div class="progress">
+            <div id="bar" class="bar"></div>
+            <div id="barInd" class="bar" style="display:none"></div>
+          </div>
+          <div id="status" class="statusline"></div>
           <div id="result" class="result"></div>
         </div>
 
@@ -100,17 +117,21 @@
           <div class="section-title">Target format</div>
           <div id="chips" class="chips" aria-label="Suggested formats"></div>
 
+          <!-- Convert always visible -->
+          <div class="row" style="margin-top:8px">
+            <select id="targetSelect" aria-label="All formats"></select>
+            <button id="convertBtn" class="convert" disabled>Convert</button>
+          </div>
+
           <details id="moreBox">
-            <summary style="margin-top:10px">More formats</summary>
-            <div class="row" style="margin-top:8px">
-              <select id="targetSelect" aria-label="All formats"></select>
-              <button id="convertBtn" class="convert" disabled>Convert</button>
+            <summary style="margin-top:10px">Why these formats?</summary>
+            <div class="muted" style="margin-top:8px">
+              We show the most common, high-quality conversions for your file type and hide identical target formats.
             </div>
           </details>
 
           <div class="muted" style="margin-top:10px">
-            Tips: HEIC→JPG • DOCX→PDF • MP4→MP3 • PDF→DOCX •
-            <strong>Phone list → Clean CSV</strong> • <strong>VCF⇄CSV</strong> • <strong>SRT⇄VTT</strong>
+            Tips: <strong>PDF→JPG/PNG/WEBP/DOCX</strong> • HEIC→JPG • DOCX→PDF • MP4→MP3 • VCF⇄CSV • SRT⇄VTT
           </div>
         </div>
       </div>
@@ -135,9 +156,9 @@
 
   <!-- App logic -->
   <script>
-    // --- Helpers ---------------------------------------------------------------
     const $ = (q) => document.querySelector(q);
     const bar = $("#bar");
+    const barInd = $("#barInd");
     const drop = $("#drop");
     const fileInput = $("#file");
     const browseBtn = $("#browseBtn");
@@ -146,6 +167,7 @@
     const targetSelect = $("#targetSelect");
     const convertBtn = $("#convertBtn");
     const resultBox = $("#result");
+    const statusLine = $("#status");
 
     // Supported formats (must match backend)
     const IMAGE_IN = ["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"];
@@ -166,33 +188,48 @@
     function extOf(name){ const m=/\.[^.]+$/.exec(name||""); return m?m[0].slice(1).toLowerCase():""; }
     function humanSize(n){ if(!n&&n!==0) return ""; const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++} return `${n.toFixed(n<10&&i?1:0)} ${u[i]}`; }
 
-    const SUGGEST = {
-      image: ["jpg","png","webp","pdf"],
-      video: ["mp4","webm","mov","mp3"],
-      audio: ["mp3","wav","aac","flac"],
-      doc:   ["pdf","docx","pptx","xlsx"],
-      data:  ["phonecsv","csv","vcf","vtt","srt","csv_from_json","json_from_csv"]
-    };
+    // Curated suggestions per category, refined for common tasks
+    function suggestedTargets(ext, cat){
+      // PDF → images + DOCX (popular), exclude same
+      if(ext==="pdf") return ["jpg","png","webp","docx"];
+      if(cat==="image"){
+        const base=["jpg","png","webp","pdf"];
+        return base.filter(x=>x!==ext);
+      }
+      if(cat==="video"){ return ["mp4","webm","mp3"]; }
+      if(cat==="audio"){ return ["mp3","wav","aac","flac"].filter(x=>x!==ext); }
+      if(cat==="doc"){
+        // show PDF + main office formats, no same
+        const base=["pdf","docx","pptx","xlsx","odt","odp","ods"];
+        return base.filter(x=>x!==ext);
+      }
+      if(cat==="data"){
+        return ["phonecsv","csv","vcf","vtt","srt","csv_from_json","json_from_csv"];
+      }
+      return [];
+    }
+
+    function allTargetsFor(ext, cat){
+      if(cat==="image") return IMAGE_OUT.filter(x=>x!==ext);
+      if(cat==="video"||cat==="audio") return AV_OUT.filter(x=>x!==ext);
+      if(cat==="data") return DATA_OUT; // data ops aren't the same as ext
+      return DOC_OUT.filter(x=>x!==ext);
+    }
 
     function guessCategory(ext){
       if(IMAGE_IN.includes(ext)) return "image";
-      if(AV_IN.includes(ext)){ return ["mp4","mkv","mov","webm"].includes(ext) ? "video" : "audio"; }
+      if(AV_IN.includes(ext)) return ["mp4","mkv","mov","webm"].includes(ext) ? "video" : "audio";
       if(DOC_IN.includes(ext)) return "doc";
       if(DATA_IN.includes(ext)) return "data";
       return "doc";
     }
-    function allTargetsFor(cat){
-      if(cat==="image") return IMAGE_OUT;
-      if(cat==="video"||cat==="audio") return AV_OUT;
-      if(cat==="data") return DATA_OUT;
-      return DOC_OUT;
-    }
 
-    function setSuggestions(cat){
+    function setSuggestions(ext, cat){
       chipsWrap.innerHTML = "";
-      const opts = allTargetsFor(cat);
+      const opts = allTargetsFor(ext, cat);
       targetSelect.innerHTML = opts.map(o=>`<option value="${o}">${o.toUpperCase()}</option>`).join("");
-      const top = (SUGGEST[cat]||[]).filter(x=>opts.includes(x));
+
+      const top = suggestedTargets(ext, cat).filter(x=>opts.includes(x));
       top.forEach(fmt=>{
         const chip=document.createElement("button");
         chip.type="button"; chip.className="chip"; chip.textContent=fmt.toUpperCase();
@@ -202,7 +239,8 @@
         });
         chipsWrap.appendChild(chip);
       });
-      const first = chipsWrap.querySelector(".chip"); if(first) first.click();
+      const first = chipsWrap.querySelector(".chip");
+      if(first){ first.click(); } else { convertBtn.disabled = !fileInput.files.length; }
     }
 
     // Drag & drop
@@ -213,9 +251,10 @@
     fileInput.addEventListener("change", ()=>{ const f=fileInput.files?.[0]; if(f) onFilePicked(f); });
 
     function onFilePicked(file){
-      resultBox.innerHTML=""; bar.style.width="0%";
+      resultBox.innerHTML=""; statusLine.textContent=""; bar.style.width="0%"; barInd.style.display="none"; barInd.classList.remove("indeterminate");
       const ext=extOf(file.name), cat=guessCategory(ext);
-      setSuggestions(cat); filemeta.textContent=`${file.name} — ${ext.toUpperCase()} • ${humanSize(file.size)}`;
+      setSuggestions(ext, cat);
+      filemeta.textContent=`${file.name} — ${ext.toUpperCase()} • ${humanSize(file.size)}`;
       convertBtn.disabled=false;
     }
 
@@ -223,20 +262,40 @@
     convertBtn.addEventListener("click", ()=>{
       const file=fileInput.files?.[0]; if(!file){ note("Please choose a file first.", true); return; }
       const target=targetSelect.value; if(!target){ note("Please choose a target format.", true); return; }
-      resultBox.innerHTML=""; bar.style.width="0%";
+      resultBox.innerHTML=""; statusLine.textContent="Uploading…"; bar.style.width="0%"; barInd.style.display="none"; barInd.classList.remove("indeterminate");
 
       const fd=new FormData(); fd.append("file", file); fd.append("target", target);
       const xhr=new XMLHttpRequest(); xhr.open("POST","/api/convert");
-      xhr.upload.onprogress=(ev)=>{ if(ev.lengthComputable) bar.style.width=Math.round((ev.loaded/ev.total)*100)+"%"; };
+
+      xhr.upload.onprogress=(ev)=>{ if(ev.lengthComputable){ bar.style.width=Math.round((ev.loaded/ev.total)*100)+"%"; } };
+      xhr.upload.onload=()=>{ // Upload is done; server is processing now
+        bar.style.width="100%";
+        statusLine.textContent="Processing…";
+        barInd.style.display="block";
+        barInd.classList.add("indeterminate");
+      };
+
       xhr.onreadystatechange=()=>{ if(xhr.readyState===XMLHttpRequest.DONE){
-        try{ const data=JSON.parse(xhr.responseText);
-          if(xhr.status===200){
+        barInd.classList.remove("indeterminate");
+        barInd.style.display="none";
+        if(xhr.status===200){
+          try{
+            const data=JSON.parse(xhr.responseText);
             const t = data.process_time ? ` <span class="muted">(⏱ ${data.process_time}s)</span>` : "";
+            statusLine.textContent="Done.";
             resultBox.innerHTML=`<span class="pill ok">Done</span> <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>${t}`;
-          }else{
-            resultBox.innerHTML=`<span class="pill err">Error</span> ${escapeHtml(data.detail||xhr.responseText)}`;
+          }catch{
+            statusLine.textContent="Done."; resultBox.textContent="Download ready.";
           }
-        }catch{ resultBox.textContent=xhr.responseText||"Unknown error"; }
+        }else{
+          try{
+            const data=JSON.parse(xhr.responseText);
+            resultBox.innerHTML=`<span class="pill err">Error</span> ${escapeHtml(data.detail||xhr.responseText)}`;
+          }catch{
+            resultBox.innerHTML=`<span class="pill err">Error</span> ${escapeHtml(xhr.responseText||"Unknown error")}`;
+          }
+          statusLine.textContent="";
+        }
       }};
       xhr.send(fd);
     });
@@ -263,7 +322,6 @@
     function onAccept(){
       setCookie('consent','accept', 180);
       cb.classList.remove('show'); cb.setAttribute('aria-hidden','true');
-      // loadAnalytics(); // add optional analytics here AFTER consent
     }
     function onDecline(){
       cb.classList.remove('show'); cb.setAttribute('aria-hidden','true');
@@ -272,7 +330,6 @@
     btnD.addEventListener('click', onDecline);
     window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && cb.classList.contains('show')) onDecline(); });
     showBannerIfNeeded();
-    function loadAnalytics(){ /* add optional analytics here if ever needed */ }
   </script>
 </body>
 </html>
