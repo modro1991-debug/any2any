@@ -27,6 +27,10 @@ AV_OUT = AV_IN
 DOC_IN = {"pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"}
 DOC_OUT = {"pdf","docx","xlsx","pptx","odt","ods","odp"}
 
+# NEW:
+from converters import DATA_IN, DATA_OUT
+
+
 # --- Helpers ---
 def _ip(request: Request) -> str:
     # Render/Reverse proxies set X-Forwarded-For
