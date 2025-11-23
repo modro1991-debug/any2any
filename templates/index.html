@@ -56,7 +56,12 @@
               </svg>
               <div style="font-weight:600;margin-bottom:6px;">Drag & drop a file</div>
               <div class="muted">or</div><br/>
-              <label><input id="file" type="file"/><button class="cta" type="button" id="browseBtn">Choose file</button></label>
+              <!-- replace the old label+button block inside #drop with this -->
+              <label for="file">
+                <input id="file" type="file" hidden />
+                <button class="cta" type="button" aria-controls="file">Choose file</button>
+              </label>
+
               <div id="filemeta" class="filemeta" aria-live="polite"></div>
             </div>
           </div>
