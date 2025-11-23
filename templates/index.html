@@ -1,42 +1,116 @@
-<!doctype html><html><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Any2Any File Converter</title>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Any2Any — Free Online File Converter</title>
+<meta name="description" content="Convert images, videos, audio and documents online. Fast, private, and free. Files auto-delete after ~20 minutes.">
 <style>
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#0b1020;color:#e7ecf5}
-.wrap{max-width:780px;margin:40px auto;padding:24px;background:#0f1630;border:1px solid #1f2a4a;border-radius:16px}
-h1{margin:0 0 8px 0;font-size:28px}.muted{opacity:.85}
-.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.card{background:#121a3a;padding:16px;border-radius:12px;border:1px dashed #2a3a6a}
-select,input[type=file],button{background:#0b1020;color:#e7ecf5;border:1px solid #2a3a6a;border-radius:10px;padding:10px 12px}
-button{cursor:pointer;background:#2a66ff;border:none}.progress{height:8px;background:#1a2448;border-radius:6px;overflow:hidden;margin-top:12px}
-.bar{height:8px;background:#2a66ff;width:0%}.pill{padding:4px 8px;background:#0b1020;border:1px solid #2a3a6a;border-radius:999px;font-size:12px}
-.success{background:#0f2f1a;border-color:#286a3a}.error{background:#2f1010;border-color:#6a2a2a}
-.footer{margin-top:24px;font-size:12px;opacity:.7} a{color:#7fb2ff}
+  :root{
+    --bg:#0b1020;--panel:#0f1630;--card:#121a3a;--muted:#9ab0d6;
+    --line:#1f2a4a;--cta:#2a66ff;--cta-2:#5ea1ff;--ok:#1f8a4d;--err:#a23a3a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#e7ecf5;font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;}
+  .wrap{max-width:960px;margin:auto;padding:24px}
+  .hero{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px}
+  h1{margin:0 0 6px 0;font-size:28px;letter-spacing:.2px}
+  .muted{color:var(--muted);font-size:14px}
+
+  .grid{display:grid;gap:16px;grid-template-columns:1fr; margin-top:18px}
+  @media(min-width:900px){.grid{grid-template-columns:1.2fr .8fr}}
+
+  .drop{border:2px dashed var(--line);background:var(--card);border-radius:16px;padding:22px;display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center;transition:.2s}
+  .drop.drag{border-color:var(--cta);box-shadow:0 0 0 3px rgba(42,102,255,.25) inset}
+  .drop input{display:none}
+  .drop .cta{display:inline-flex;align-items:center;gap:8px;background:var(--cta);border:none;padding:10px 14px;border-radius:12px;color:white;font-weight:600;cursor:pointer}
+  .filemeta{margin-top:10px;font-size:14px;color:var(--muted)}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .section-title{margin:0 0 8px 0;font-size:14px;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{border:1px solid var(--line);background:#0b1020;padding:8px 12px;border-radius:999px;cursor:pointer;font-size:14px}
+  .chip.active,.chip:hover{border-color:var(--cta);box-shadow:0 0 0 2px rgba(42,102,255,.25)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  select,button{background:#0b1020;color:#e7ecf5;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  button.convert{background:var(--cta);border:none;font-weight:600}
+  button.convert:disabled{opacity:.6;cursor:not-allowed}
+  details{margin-top:8px}
+  details summary{cursor:pointer;color:var(--muted)}
+  .progress{height:8px;background:#1a2448;border-radius:6px;overflow:hidden;margin-top:12px}
+  .bar{height:8px;background:var(--cta);width:0%}
+  .notice{margin-top:10px;font-size:13px;color:var(--muted)}
+  .result{margin-top:12px;font-size:14px}
+  .pill{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:#0b1020}
+  .pill.ok{background:#0f2f1a;border-color:#1d623a}
+  .pill.err{background:#2f1010;border-color:#6a2a2a}
+  a.link{color:#7fb2ff;text-decoration:none}
+  .footer{margin-top:18px;font-size:12px;color:var(--muted)}
 </style>
-</head><body>
-<div class="wrap">
-  <h1>Any2Any File Converter</h1>
-  <p class="muted">Convert images, videos, audio, and documents. Files are auto-deleted after ~20 minutes.</p>
-  <div class="card">
-    <form id="form" class="row">
-      <div><label>File</label><br/><input id="file" type="file" required/></div>
-      <div><label>Target</label><br/>
-        <select id="target" required>
-          <optgroup label="Images"><option>jpg</option><option>png</option><option>webp</option><option>gif</option><option>pdf</option></optgroup>
-          <optgroup label="Audio / Video"><option>mp3</option><option>wav</option><option>aac</option><option>flac</option><option>mp4</option><option>mkv</option><option>mov</option><option>webm</option></optgroup>
-          <optgroup label="Documents"><option>pdf</option><option>docx</option><option>pptx</option><option>xlsx</option><option>odt</option><option>odp</option><option>ods</option></optgroup>
-        </select>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <h1>Any2Any File Converter</h1>
+      <div class="muted">Fast, private, and free. Files are auto-deleted after ~20 minutes.</div>
+
+      <div class="grid">
+        <!-- Left: drop zone -->
+        <div class="panel">
+          <div id="drop" class="drop" tabindex="0" aria-label="Drop file here">
+            <div>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="opacity:.9;margin-bottom:8px">
+                <path d="M12 16V4m0 0l-4 4m4-4l4 4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" stroke="white" stroke-opacity=".7" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <div style="font-weight:600;margin-bottom:6px;">Drag & drop a file</div>
+              <div class="muted">or</div>
+              <br/>
+              <label>
+                <input id="file" type="file" />
+                <button class="cta" type="button" id="browseBtn">Choose file</button>
+              </label>
+              <div id="filemeta" class="filemeta" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <div class="progress"><div id="bar" class="bar"></div></div>
+          <div id="result" class="result"></div>
+        </div>
+
+        <!-- Right: target selection -->
+        <div class="panel">
+          <div class="section-title">Target format</div>
+          <div id="chips" class="chips" aria-label="Suggested formats">
+            <!-- Quick chips injected by JS -->
+          </div>
+
+          <details id="moreBox">
+            <summary style="margin-top:10px">More formats</summary>
+            <div class="row" style="margin-top:8px">
+              <select id="targetSelect" aria-label="All formats">
+                <!-- options injected by JS -->
+              </select>
+              <button id="convertBtn" class="convert" disabled>Convert</button>
+            </div>
+          </details>
+
+          <div class="notice">
+            Tips: HEIC→JPG • DOCX→PDF • MP4→MP3 • PDF→DOCX<br/>
+            Max file: <strong>50MB</strong> (configurable). No sign-up required.
+          </div>
+        </div>
       </div>
-      <div><label>&nbsp;</label><br/><button type="submit">Convert</button></div>
-    </form>
-    <div class="progress"><div id="bar" class="bar"></div></div>
-    <div id="msg" style="margin-top:12px;"></div>
+
+      <div class="footer">
+        <span class="pill">Privacy: auto-delete</span>
+        <span class="pill">Rate limit to prevent abuse</span>
+        <span class="pill">Works on mobile & desktop</span>
+      </div>
+    </div>
   </div>
-  <div class="footer">
-    <span class="pill">Max 50MB (configurable)</span>
-    <span class="pill">Free beta</span>
-    <span class="pill">Privacy: auto-delete</span>
-  </div>
-</div>
-<script src="/static/app.js"></script>
-</body></html>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
