@@ -9,7 +9,6 @@
   const targetSelect = $("#targetSelect");
   const convertBtn = $("#convertBtn");
   const localToggle = $("#localToggle");
-  const autoStart = $("#autoStart");
   const bar = $("#bar");
   const barInd = $("#barInd");
   const statusLine = $("#status");
@@ -102,7 +101,6 @@
     enableConvertIfReady();
   }
   function canDoLocal(srcExt, targetExt){ return LOCAL_OK[srcExt]?.has(targetExt) || false; }
-  function note(t, err=false){ resultBox.innerHTML = `<span class="pill ${err?'err':'ok'}">${err?'Error':'Note'}</span> ${escapeHtml(t)}`; }
   function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
   // ---------- Local conversion ----------
@@ -180,24 +178,7 @@
     const f = fileInput.files?.[0];
     if (!f) return;
     onFilePicked(f);
-
-    // persist & apply autoStart
-    if (autoStart) {
-      const want = !!autoStart.checked;
-      localStorage.setItem("a2a.autoStart", want ? "1" : "");
-      if (want) {
-        setTimeout(() => {
-          if (!convertBtn.disabled && targetSelect.value) convertBtn.click();
-        }, 60);
-      }
-    }
   });
-
-  // restore saved autoStart
-  (function restorePref(){
-    const saved = localStorage.getItem("a2a.autoStart");
-    if (saved && autoStart) autoStart.checked = true;
-  })();
 
   function onFilePicked(file){
     // reset UI
