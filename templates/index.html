@@ -19,15 +19,15 @@
   .drop{border:2px dashed var(--line);background:var(--card);border-radius:16px;padding:22px;display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center;transition:.2s}
   .drop.drag{border-color:var(--cta);box-shadow:0 0 0 3px rgba(42,102,255,.25) inset}
 
-  /* Overlay input that captures clicks anywhere on the button */
+  /* Overlay input captures click anywhere on the button */
   .file-chooser{ position:relative; display:inline-block; }
   .file-chooser input[type="file"]{
     position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
   }
 
   .cta{display:inline-flex;align-items:center;gap:8px;background:var(--cta);border:none;padding:10px 14px;border-radius:12px;color:white;font-weight:600;cursor:pointer}
-  .filemeta{margin-top:10px;font-size:14px;color:var(--muted)}
-  .section-title{margin:0 0 8px 0;font-size:14px;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
+  .filemeta{margin-top:10px;font-size:14px;color:#9ab0d6}
+  .section-title{margin:0 0 8px 0;font-size:14px;color:#9ab0d6;letter-spacing:.3px;text-transform:uppercase}
   .chips{display:flex;flex-wrap:wrap;gap:8px}
   .chip{border:1px solid var(--line);background:#0b1020;padding:8px 12px;border-radius:999px;cursor:pointer;font-size:14px}
   .chip.active,.chip:hover{border-color:var(--cta);box-shadow:0 0 0 2px rgba(42,102,255,.25)}
@@ -53,10 +53,8 @@
   .footer{margin-top:18px;font-size:12px;color:#9ab0d6;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .footer a{color:#7fb2ff;text-decoration:none}
 
-  /* Cookie banner (polite) */
-  .cookie-banner{
-    position:fixed;left:12px;right:12px;bottom:12px;z-index:50;background:#121a3a;border:1px solid #1f2a4a;color:#e7ecf5;border-radius:14px;padding:12px 14px;display:none;box-shadow:0 8px 24px rgba(0,0,0,.35)
-  }
+  /* Cookie banner */
+  .cookie-banner{ position:fixed;left:12px;right:12px;bottom:12px;z-index:50;background:#121a3a;border:1px solid #1f2a4a;color:#e7ecf5;border-radius:14px;padding:12px 14px;display:none;box-shadow:0 8px 24px rgba(0,0,0,.35) }
   .cookie-banner.show{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .cookie-banner p{margin:0;font-size:14px;color:#9ab0d6}
   .cookie-actions{margin-left:auto;display:flex;gap:8px}
@@ -71,7 +69,7 @@
       <div class="muted">Fast, private, and free. Files are processed temporarily and auto-deleted. We don’t store your files.</div>
 
       <div class="grid">
-        <!-- Left column: drop zone + progress/result -->
+        <!-- Left: drop zone + progress/result -->
         <div class="panel">
           <div id="drop" class="drop" tabindex="0" aria-label="Drop file here">
             <div>
@@ -93,7 +91,7 @@
           <div id="result" class="result"></div>
         </div>
 
-        <!-- Right column: target selection -->
+        <!-- Right: targets -->
         <div class="panel">
           <div class="section-title">Target format</div>
           <div id="chips" class="chips" aria-label="Suggested formats"></div>
@@ -102,15 +100,14 @@
             <button id="convertBtn" class="convert" type="button" disabled>Convert</button>
           </div>
 
-          <label class="row" style="margin-top:8px; gap:8px; color:#9ab0d6; font-size:13px;">
+          <label class="row" style="margin-top:6px; gap:8px; color:#9ab0d6; font-size:13px;">
             <input id="localToggle" type="checkbox"/>
             Process in my browser (beta) — images & PDF→images
           </label>
           <label class="row" style="margin-top:6px; gap:8px; color:#9ab0d6; font-size:13px;">
-          <input id="autoStart" type="checkbox"/>
+            <input id="autoStart" type="checkbox" checked/>
             Start converting immediately after I choose a file
-         </label>
-
+          </label>
 
           <div class="muted" style="margin-top:10px">
             Tips: <strong>PDF→JPG/PNG/WEBP/DOCX</strong> • HEIC→JPG • DOCX→PDF • MP4→MP3 • VCF⇄CSV • SRT⇄VTT
@@ -138,7 +135,7 @@
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
-  <!-- Your app -->
+  <!-- App JS -->
   <script src="/static/js/app.js"></script>
 </body>
 </html>

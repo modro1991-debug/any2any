@@ -2,9 +2,12 @@ import os, time, secrets
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+# OPTIONAL CORS (useful if you open the HTML from another domain while API lives elsewhere)
+from fastapi.middleware.cors import CORSMiddleware
 
 from converters import (
     TMP_DIR, convert_image, convert_av, convert_doc,
@@ -15,10 +18,20 @@ from converters import (
 )
 
 app = FastAPI(title="Any2Any Converter")
+
+# If front-end and API are the same domain, this does nothing harmful.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten later to your domain
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-MAX_SIZE_BYTES = int(os.getenv("MAX_SIZE_BYTES", 50 * 1024 * 1024))
+MAX_SIZE_BYTES = int(os.getenv("MAX_SIZE_BYTES", 50 * 1024 * 1024))  # 50 MB
 MAX_REQUESTS = int(os.getenv("MAX_REQUESTS_PER_10M", 30))
 WINDOW = 600
 BUCKET = {}
@@ -75,6 +88,18 @@ async def _save_upload(f: UploadFile, limit: int) -> Path:
 async def index(request: Request):
     _sweep_tmp()
     return templates.TemplateResponse("index.html", {"request": request})
+
+@app.head("/")
+async def index_head():
+    return HTMLResponse(status_code=200)
+
+@app.get("/healthz")
+async def healthz_get():
+    return PlainTextResponse("ok", status_code=200)
+
+@app.head("/healthz")
+async def healthz_head():
+    return PlainTextResponse("", status_code=200)
 
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy(request: Request):

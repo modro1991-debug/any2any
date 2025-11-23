@@ -9,13 +9,13 @@
   const targetSelect = $("#targetSelect");
   const convertBtn = $("#convertBtn");
   const localToggle = $("#localToggle");
+  const autoStart = $("#autoStart");
   const bar = $("#bar");
   const barInd = $("#barInd");
   const statusLine = $("#status");
   const resultBox = $("#result");
-  const autoStart = $("#autoStart");
 
-  // Supported formats (must align with backend)
+  // Supported formats (align with backend)
   const IMAGE_IN = ["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"];
   const AV_IN    = ["mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"];
   const DOC_IN   = ["pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"];
@@ -105,7 +105,7 @@
   function note(t, err=false){ resultBox.innerHTML = `<span class="pill ${err?'err':'ok'}">${err?'Error':'Note'}</span> ${escapeHtml(t)}`; }
   function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
-  // Local conversion using pdf.js + canvas + JSZip
+  // ---------- Local conversion ----------
   async function convertLocal(file, srcExt, targetExt){
     const PDFJS = window['pdfjsLib'];
 
@@ -164,7 +164,7 @@
     throw new Error("Local conversion not supported for this format.");
   }
 
-  // UI events
+  // ---------- UI events ----------
   targetSelect.addEventListener("change", enableConvertIfReady);
 
   // Drag & drop
@@ -175,31 +175,29 @@
     if (f){ fileInput.files = e.dataTransfer.files; onFilePicked(f); }
   });
 
-  // File picker
-fileInput.addEventListener("change", () => {
-  const f = fileInput.files?.[0];
-  if (!f) return;
-  onFilePicked(f);
+  // File picker change
+  fileInput.addEventListener("change", () => {
+    const f = fileInput.files?.[0];
+    if (!f) return;
+    onFilePicked(f);
 
-  // persist the toggle choice
-  if (autoStart) {
-    const want = !!autoStart.checked;
-    localStorage.setItem("a2a.autoStart", want ? "1" : "");
-    if (want) {
-      // give UI a tick to populate targets, then fire convert
-      setTimeout(() => {
-        // only click if the button is enabled and a target exists
-        if (!convertBtn.disabled && targetSelect.value) convertBtn.click();
-      }, 50);
+    // persist & apply autoStart
+    if (autoStart) {
+      const want = !!autoStart.checked;
+      localStorage.setItem("a2a.autoStart", want ? "1" : "");
+      if (want) {
+        setTimeout(() => {
+          if (!convertBtn.disabled && targetSelect.value) convertBtn.click();
+        }, 60);
+      }
     }
-  }
-});
+  });
 
-// restore previous preference on load
-(function restorePref(){
-  const saved = localStorage.getItem("a2a.autoStart");
-  if (saved && autoStart) autoStart.checked = true;
-})();
+  // restore saved autoStart
+  (function restorePref(){
+    const saved = localStorage.getItem("a2a.autoStart");
+    if (saved && autoStart) autoStart.checked = true;
+  })();
 
   function onFilePicked(file){
     // reset UI
@@ -214,19 +212,19 @@ fileInput.addEventListener("change", () => {
     const cat = guessCategory(ext);
     setSuggestions(ext, cat);
 
-    // meta
+    // file meta
     filemeta.textContent = `${file.name} — ${ext.toUpperCase()} • ${humanSize(file.size)}`;
     enableConvertIfReady();
   }
 
-  // Convert click
+  // ---------- Convert click ----------
   convertBtn.addEventListener("click", async () => {
     if (convertBtn.disabled) return;
     const file = fileInput.files?.[0];
     const target = targetSelect.value;
     if (!file || !target) return;
 
-    // reset
+    // reset progress
     resultBox.innerHTML = "";
     statusLine.textContent = "";
     bar.style.width = "0%";
@@ -235,7 +233,7 @@ fileInput.addEventListener("change", () => {
 
     const srcExt = extOf(file.name);
 
-    // Local path
+    // Local conversion path
     if (localToggle.checked && canDoLocal(srcExt, target)){
       try{
         const t0 = performance.now();
@@ -245,32 +243,32 @@ fileInput.addEventListener("change", () => {
         return;
       }catch(err){
         console.warn("Local conversion failed, falling back to server:", err);
+        // fall through to server path
       }
     }
 
-    // Server path
+    // Server conversion path
     statusLine.textContent = "Uploading…";
     const fd = new FormData();
     fd.append("file", file);
     fd.append("target", target);
+
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/convert");
 
-    // These show network problems clearly in the UI
+    // Helpful error handlers
     xhr.onerror = () => {
       barInd.classList.remove("indeterminate");
       barInd.style.display = "none";
-      resultBox.innerHTML = `<span class="pill err">Error</span> Network error while uploading. Check your internet or server.`;
+      resultBox.innerHTML = `<span class="pill err">Error</span> Network error while uploading.`;
       statusLine.textContent = "";
     };
-
     xhr.onabort = () => {
       barInd.classList.remove("indeterminate");
       barInd.style.display = "none";
       resultBox.innerHTML = `<span class="pill err">Cancelled</span> Upload was aborted.`;
       statusLine.textContent = "";
     };
-
 
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable){
@@ -300,20 +298,22 @@ fileInput.addEventListener("change", () => {
             resultBox.textContent = "Download ready.";
           }
         } else {
-          try{
+          // Show server errors clearly (413/415/etc)
+          let msg = xhr.responseText || `HTTP ${xhr.status}`;
+          try {
             const data = JSON.parse(xhr.responseText);
-            resultBox.innerHTML = `<span class="pill err">Error</span> ${escapeHtml(data.detail || xhr.responseText)}`;
-          }catch{
-            resultBox.innerHTML = `<span class="pill err">Error</span> ${escapeHtml(xhr.responseText || "Unknown error")}`;
-          }
+            msg = data.detail || msg;
+          } catch {}
+          resultBox.innerHTML = `<span class="pill err">Error</span> ${escapeHtml(msg)}`;
           statusLine.textContent = "";
         }
       }
     };
+
     xhr.send(fd);
   });
 
-  // Cookie banner (polite)
+  // ---------- Cookie banner ----------
   const cb = document.getElementById('cookieBanner');
   const btnA = document.getElementById('cookieAccept');
   const btnD = document.getElementById('cookieDecline');
