@@ -1,142 +1,146 @@
-// --- Helpers ---------------------------------------------------------------
-const $ = (q) => document.querySelector(q);
-const bar = $("#bar");
-const drop = $("#drop");
-const fileInput = $("#file");
-const browseBtn = $("#browseBtn");
-const filemeta = $("#filemeta");
-const chipsWrap = $("#chips");
-const targetSelect = $("#targetSelect");
-const convertBtn = $("#convertBtn");
-const resultBox = $("#result");
+import os, time, secrets
+from pathlib import Path
+from typing import Optional
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
-const IMAGE_IN = ["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"];
-const AV_IN     = ["mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"];
-const DOC_IN    = ["pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"];
-const IMAGE_OUT = IMAGE_IN;
-const AV_OUT    = AV_IN;
-const DOC_OUT   = ["pdf","docx","xlsx","pptx","odt","ods","odp"];
+# uses the converters module you already added
+from converters import TMP_DIR, convert_image, convert_av, convert_doc
 
-function extOf(name){ const m = /\.[^.]+$/.exec(name||""); return m ? m[0].slice(1).toLowerCase() : ""; }
-function humanSize(n){ if(!n && n!==0) return ""; const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++} return `${n.toFixed(n<10&&i?1:0)} ${u[i]}`; }
+app = FastAPI(title="Any2Any Converter")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
-// Suggestions per category
-const SUGGEST = {
-  image: ["jpg","png","webp","pdf"],
-  video: ["mp4","webm","mov","mp3"], // mp3 = extract audio
-  audio: ["mp3","wav","aac","flac"],
-  doc:   ["pdf","docx","pptx","xlsx"]
-};
+# --- Config ---
+MAX_SIZE_BYTES = int(os.getenv("MAX_SIZE_BYTES", 50 * 1024 * 1024))  # 50MB
+MAX_REQUESTS = int(os.getenv("MAX_REQUESTS_PER_10M", 30))
+WINDOW = 600  # seconds
+BUCKET = {}   # naive in-memory rate limit bucket
 
-function guessCategory(ext){
-  if(IMAGE_IN.includes(ext)) return "image";
-  if(AV_IN.includes(ext)){
-    // split audio vs video for smarter suggestions
-    if(["mp4","mkv","mov","webm"].includes(ext)) return "video";
-    return "audio";
-  }
-  if(DOC_IN.includes(ext)) return "doc";
-  return "doc";
-}
+# --- Allowed formats ---
+IMAGE_IN = {"jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"}
+IMAGE_OUT = IMAGE_IN
+AV_IN = {"mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"}
+AV_OUT = AV_IN
+DOC_IN = {"pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"}
+DOC_OUT = {"pdf","docx","xlsx","pptx","odt","ods","odp"}
 
-function allTargetsFor(cat){
-  if(cat==="image") return IMAGE_OUT;
-  if(cat==="video"||cat==="audio") return AV_OUT;
-  return DOC_OUT;
-}
+# --- Helpers ---
+def _ip(request: Request) -> str:
+    # Render/Reverse proxies set X-Forwarded-For
+    return request.headers.get("x-forwarded-for", request.client.host)
 
-function setSuggestions(cat){
-  chipsWrap.innerHTML = "";
-  const opts = allTargetsFor(cat);
-  // populate <select> (all formats)
-  targetSelect.innerHTML = opts.map(o=>`<option value="${o}">${o.toUpperCase()}</option>`).join("");
+def _rate_limit(ip: str):
+    now = time.time()
+    window_start = now - WINDOW
+    BUCKET.setdefault(ip, [])
+    BUCKET[ip] = [t for t in BUCKET[ip] if t >= window_start]
+    if len(BUCKET[ip]) >= MAX_REQUESTS:
+        raise HTTPException(429, "Too many requests, please try again later.")
+    BUCKET[ip].append(now)
 
-  // chips = top formats for that category
-  const top = SUGGEST[cat] || [];
-  top.forEach(fmt=>{
-    if(!opts.includes(fmt)) return;
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "chip";
-    chip.textContent = fmt.toUpperCase();
-    chip.addEventListener("click", ()=>{
-      [...chipsWrap.querySelectorAll(".chip")].forEach(c=>c.classList.remove("active"));
-      chip.classList.add("active");
-      targetSelect.value = fmt;
-      convertBtn.disabled = !fileInput.files.length;
-    });
-    chipsWrap.appendChild(chip);
-  });
+def _secure_name(name: str) -> str:
+    return secrets.token_hex(16) + (Path(name).suffix or "")
 
-  // select first chip by default
-  const first = chipsWrap.querySelector(".chip");
-  if(first){ first.click(); }
-}
+def _sweep_tmp(ttl_seconds: int = 20 * 60):
+    now = time.time()
+    for f in TMP_DIR.glob("*"):
+        try:
+            if now - f.stat().st_mtime > ttl_seconds:
+                f.unlink()
+        except Exception:
+            pass
 
-// --- Drag & drop -----------------------------------------------------------
-["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {e.preventDefault(); drop.classList.add("drag");}));
-["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => {e.preventDefault(); drop.classList.remove("drag");}));
-drop.addEventListener("drop", (e)=>{
-  const f = e.dataTransfer.files?.[0];
-  if(f){ fileInput.files = e.dataTransfer.files; onFilePicked(f); }
-});
-browseBtn.addEventListener("click", ()=> fileInput.click());
-fileInput.addEventListener("change", ()=> {
-  const f = fileInput.files?.[0];
-  if(f) onFilePicked(f);
-});
+async def _save_upload(f: UploadFile, limit: int) -> Path:
+    dest = TMP_DIR / _secure_name(f.filename or "file.bin")
+    size = 0
+    with dest.open("wb") as out:
+        while True:
+            chunk = await f.read(1024 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > limit:
+                out.close()
+                dest.unlink(missing_ok=True)
+                raise HTTPException(413, f"File too large (>{limit//(1024*1024)}MB).")
+            out.write(chunk)
+    dest.chmod(0o600); dest.touch()
+    return dest
 
-function onFilePicked(file){
-  resultBox.innerHTML = "";
-  bar.style.width = "0%";
-  const ext = extOf(file.name);
-  const cat = guessCategory(ext);
-  setSuggestions(cat);
-  filemeta.textContent = `${file.name} — ${ext.toUpperCase()} • ${humanSize(file.size)}`;
-  convertBtn.disabled = false;
-}
+# --- Pages ---
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    _sweep_tmp()
+    return templates.TemplateResponse("index.html", {"request": request})
 
-// --- Convert action --------------------------------------------------------
-convertBtn.addEventListener("click", async ()=>{
-  const file = fileInput.files?.[0];
-  if(!file){ toast("Please choose a file first.", true); return; }
-  const target = targetSelect.value;
-  if(!target){ toast("Please choose a target format.", true); return; }
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy(request: Request):
+    # ensure you created templates/privacy.html (we provided earlier)
+    return templates.TemplateResponse("privacy.html", {"request": request})
 
-  resultBox.innerHTML = "";
-  bar.style.width = "0%";
+@app.get("/cookies", response_class=HTMLResponse)
+async def cookies(request: Request):
+    # ensure you created templates/cookies.html (we provided earlier)
+    return templates.TemplateResponse("cookies.html", {"request": request})
 
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("target", target);
+# --- API ---
+@app.post("/api/convert")
+async def convert(request: Request,
+                  file: UploadFile = File(...),
+                  target: str = Form(...),
+                  category: Optional[str] = Form(None)):
+    _sweep_tmp()
+    _rate_limit(_ip(request))
 
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", "/api/convert");
-  xhr.upload.onprogress = (ev) => {
-    if (ev.lengthComputable) bar.style.width = Math.round((ev.loaded / ev.total) * 100) + "%";
-  };
-  xhr.onreadystatechange = () => {
-    if (xhr.readyState === XMLHttpRequest.DONE) {
-      try {
-        const data = JSON.parse(xhr.responseText);
-        if (xhr.status === 200) {
-          resultBox.innerHTML = `
-            <span class="pill ok">Done</span>
-            <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>`;
-        } else {
-          resultBox.innerHTML = `<span class="pill err">Error</span> ${escapeHtml(data.detail || xhr.responseText)}`;
-        }
-      } catch {
-        resultBox.textContent = xhr.responseText || "Unknown error";
-      }
-    }
-  };
-  xhr.send(fd);
-});
+    if not file.filename:
+        raise HTTPException(400, "No file provided.")
+    ext = (Path(file.filename).suffix or "").lower().lstrip(".")
+    if not ext:
+        raise HTTPException(400, "File must have an extension.")
 
-function toast(text, isErr=false){
-  resultBox.innerHTML = `<span class="pill ${isErr?'err':'ok'}">${isErr?'Error':'Note'}</span> ${escapeHtml(text)}`;
-}
-function escapeHtml(s){
-  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-}
+    src_path = await _save_upload(file, MAX_SIZE_BYTES)
+    try:
+        # detect category if not provided
+        cat = category
+        if cat is None:
+            if ext in IMAGE_IN and target in IMAGE_OUT: cat = "image"
+            elif ext in AV_IN and target in AV_OUT:   cat = "av"
+            elif ext in DOC_IN and target in DOC_OUT: cat = "doc"
+            else:
+                # guess best-effort
+                if ext in IMAGE_IN: cat = "image"
+                elif ext in AV_IN: cat = "av"
+                else: cat = "doc"
+
+        if cat == "image":
+            if ext not in IMAGE_IN or target not in IMAGE_OUT:
+                raise HTTPException(400, "Unsupported image conversion.")
+            out_path = convert_image(src_path, target)
+        elif cat == "av":
+            if ext not in AV_IN or target not in AV_OUT:
+                raise HTTPException(400, "Unsupported audio/video conversion.")
+            out_path = convert_av(src_path, target)
+        elif cat == "doc":
+            if ext not in DOC_IN or target not in DOC_OUT:
+                raise HTTPException(400, "Unsupported document conversion.")
+            out_path = convert_doc(src_path, target)
+        else:
+            raise HTTPException(400, "Unsupported category.")
+
+        # NOTE (GDPR): we do NOT store files anywhere. Only temp processing; auto-swept.
+        return JSONResponse({"download": f"/download/{out_path.name}", "filename": out_path.name})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Conversion failed: {e}")
+
+@app.get("/download/{fname}")
+async def download(fname: str):
+    p = TMP_DIR / fname
+    if not p.exists():
+        raise HTTPException(404, "File not found or expired.")
+    # File lives only briefly in tmp; we do not persist anything.
+    return FileResponse(str(p), filename=fname)
