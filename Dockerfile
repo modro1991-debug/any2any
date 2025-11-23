@@ -1,8 +1,13 @@
+# Dockerfile (only the apt line changed)
 FROM python:3.11-slim
 
-# System deps for conversions
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    imagemagick ffmpeg libreoffice p7zip-full ca-certificates && \
+    imagemagick \
+    ghostscript \        # <- add this
+    ffmpeg \
+    libreoffice \
+    p7zip-full \
+    ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
