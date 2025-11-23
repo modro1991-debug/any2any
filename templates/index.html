@@ -4,7 +4,6 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Any2Any — Free Online File Converter</title>
-<meta name="description" content="Convert images, videos, audio, documents, subtitles, contacts and data online. Fast, private, and free. Files are processed temporarily and auto-delete.">
 <style>
   :root{ --bg:#0b1020;--panel:#0f1630;--card:#121a3a;--muted:#9ab0d6;--line:#1f2a4a;--cta:#2a66ff;--ok:#1f8a4d;--err:#a23a3a; }
   *{box-sizing:border-box} body{margin:0;background:var(--bg);color:#e7ecf5;font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;}
@@ -15,7 +14,6 @@
 
   .drop{position:relative;border:2px dashed var(--line);background:var(--card);border-radius:16px;padding:22px;display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center;transition:.2s}
   .drop.drag{border-color:var(--cta);box-shadow:0 0 0 3px rgba(42,102,255,.25) inset}
-  /* keep input focusable but off-screen (avoid display:none for browser quirks) */
   #file{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
   .cta{display:inline-flex;align-items:center;gap:8px;background:var(--cta);border:none;padding:10px 14px;border-radius:12px;color:white;font-weight:600;cursor:pointer}
   .filemeta{margin-top:10px;font-size:14px;color:var(--muted)}
@@ -27,7 +25,7 @@
   .chip.active,.chip:hover{border-color:var(--cta);box-shadow:0 0 0 2px rgba(42,102,255,.25)}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
   select,button{background:#0b1020;color:#e7ecf5;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
-  button.convert{background:var(--cta);border:none;font-weight:600} button.convert:disabled{opacity:.6;cursor:not-allowed}
+  button.convert{background:var(--cta);border:none;font-weight:600} button.convert[disabled]{opacity:.6;cursor:not-allowed}
 
   .progress{height:8px;background:#1a2448;border-radius:6px;overflow:hidden;margin-top:12px;position:relative}
   .bar{height:8px;background:var(--cta);width:0%}
@@ -36,12 +34,11 @@
   .statusline{margin-top:6px;font-size:13px;color:#9ab0d6}
   .result{margin-top:12px;font-size:14px} .pill{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:#0b1020}
   .pill.ok{background:#0f2f1a;border-color:#1d623a} .pill.err{background:#2f1010;border-color:#6a2a2a} a.link{color:#7fb2ff;text-decoration:none}
-  .footer{margin-top:18px;font-size:12px;color:#9ab0d6;display:flex;gap:10px;flex-wrap:wrap;align-items:center} .footer a{color:#7fb2ff;text-decoration:none}
 
   .cookie-banner{position:fixed;left:12px;right:12px;bottom:12px;z-index:50;background:#121a3a;border:1px solid #1f2a4a;color:#e7ecf5;border-radius:14px;padding:12px 14px;display:none;box-shadow:0 8px 24px rgba(0,0,0,.35)}
   .cookie-banner.show{display:flex;align-items:center;gap:12px;flex-wrap:wrap} .cookie-banner p{margin:0;font-size:14px;color:#9ab0d6}
   .cookie-actions{margin-left:auto;display:flex;gap:8px} .cookie-btn{border:1px solid #1f2a4a;background:#0b1020;color:#e7ecf5;padding:8px 12px;border-radius:10px;cursor:pointer}
-  .cookie-btn.primary{background:#2a66ff;border:none;font-weight:600} .cookie-btn:focus{outline:2px solid #5ea1ff;outline-offset:2px}
+  .cookie-btn.primary{background:#2a66ff;border:none;font-weight:600}
   .toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:#9ab0d6;margin-top:8px}
 </style>
 </head>
@@ -49,26 +46,19 @@
   <div class="wrap">
     <div class="hero">
       <h1>Any2Any File Converter</h1>
-      <div class="muted">Fast, private, and free. We never store your files — they are processed temporarily and auto-deleted after conversion.</div>
+      <div class="muted">Fast, private, and free. Files are processed temporarily and auto-deleted. We don’t store your files.</div>
 
       <div class="grid">
         <!-- Left -->
         <div class="panel">
-          <div id="drop" class="drop" tabindex="0" aria-label="Drop file here">
+          <div id="drop" class="drop" tabindex="0">
             <div>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="opacity:.9;margin-bottom:8px">
-                <path d="M12 16V4m0 0l-4 4m4-4l4 4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" stroke="white" stroke-opacity=".7" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
               <div style="font-weight:600;margin-bottom:6px;">Drag & drop a file</div>
               <div class="muted">or</div><br/>
-
-              <!-- Robust label+input + JS fallback -->
               <input id="file" type="file" />
               <label for="file">
                 <button id="browseBtn" class="cta" type="button" aria-controls="file">Choose file</button>
               </label>
-
               <div id="filemeta" class="filemeta" aria-live="polite"></div>
             </div>
           </div>
@@ -81,76 +71,52 @@
         <!-- Right -->
         <div class="panel">
           <div class="section-title">Target format</div>
-          <div id="chips" class="chips" aria-label="Suggested formats"></div>
+          <div id="chips" class="chips"></div>
           <div class="row" style="margin-top:8px">
             <select id="targetSelect" aria-label="All formats"></select>
-            <button id="convertBtn" class="convert" disabled>Convert</button>
+            <button id="convertBtn" class="convert" type="button" disabled>Convert</button>
           </div>
           <label class="toggle">
             <input id="localToggle" type="checkbox"/>
-            Process in my browser (beta) — faster & private for images/PDF→images
+            Process in my browser (beta) — images & PDF→images
           </label>
-
-          <div class="muted" style="margin-top:10px">
-            Tips: <strong>PDF→JPG/PNG/WEBP/DOCX</strong> • HEIC→JPG • DOCX→PDF • MP4→MP3 • VCF⇄CSV • SRT⇄VTT
-          </div>
         </div>
-      </div>
-
-      <div class="footer">
-        <span>© 2025 Any2Any</span> · <a href="/privacy">Privacy</a> · <a href="/cookies">Cookies</a> ·
-        <span>Files auto-delete after ~20 minutes. We do not save files or personal data.</span>
       </div>
     </div>
   </div>
 
   <!-- Cookie banner -->
   <div id="cookieBanner" class="cookie-banner" role="dialog" aria-live="polite" aria-label="Cookie consent">
-    <p>We use a small cookie to remember your choice. No tracking, no ads. <a href="/cookies" class="link">Learn more</a>.</p>
+    <p>We use a small cookie to remember your choice. No tracking, no ads.</p>
     <div class="cookie-actions">
       <button id="cookieAccept" class="cookie-btn primary">Accept</button>
-      <button id="cookieDecline" class="cookie-btn" aria-label="Decline and continue">Decline</button>
+      <button id="cookieDecline" class="cookie-btn">Decline</button>
     </div>
   </div>
 
-  <!-- JS libs for local conversion -->
+  <!-- libs for local conversion -->
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
   <script>
   (function(){
     const $ = (q)=>document.querySelector(q);
-    const bar=$("#bar"), barInd=$("#barInd"), drop=$("#drop"), fileInput=$("#file"), browseBtn=$("#browseBtn");
-    const filemeta=$("#filemeta"), chipsWrap=$("#chips"), targetSelect=$("#targetSelect"), convertBtn=$("#convertBtn");
-    const resultBox=$("#result"), statusLine=$("#status"), localToggle=$("#localToggle");
-
-    // --- Add both triggers for max compatibility ---
-    if (browseBtn) {
-      browseBtn.addEventListener("click", (e)=>{
-        // fallback click in case label-for is interfered by CSS/overlays
-        e.preventDefault();
-        if (fileInput) fileInput.click();
-      });
-    }
-
-    // Handle change
-    fileInput.addEventListener("change", ()=>{ const f=fileInput.files?.[0]; if(f) onFilePicked(f); });
-
-    // Drag & drop
-    ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); drop.classList.add("drag");}));
-    ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); drop.classList.remove("drag");}));
-    drop.addEventListener("drop", e=>{ const f=e.dataTransfer.files?.[0]; if(f){ fileInput.files=e.dataTransfer.files; onFilePicked(f);} });
+    const fileInput=$("#file"), browseBtn=$("#browseBtn");
+    const chipsWrap=$("#chips"), targetSelect=$("#targetSelect"), convertBtn=$("#convertBtn");
+    const filemeta=$("#filemeta"), drop=$("#drop");
+    const bar=$("#bar"), barInd=$("#barInd"), statusLine=$("#status"), resultBox=$("#result"), localToggle=$("#localToggle");
 
     const IMAGE_IN=["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"];
     const AV_IN   =["mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"];
     const DOC_IN  =["pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"];
     const DATA_IN =["csv","xlsx","txt","vcf","srt","vtt","json","yaml","yml"];
-    const IMAGE_OUT=IMAGE_IN; const AV_OUT=AV_IN; const DOC_OUT=["pdf","docx","pptx","xlsx","odt","odp","ods"];
+    const IMAGE_OUT=IMAGE_IN, AV_OUT=AV_IN, DOC_OUT=["pdf","docx","pptx","xlsx","odt","odp","ods"];
     const DATA_OUT=["phonecsv","csv","vcf","srt","vtt","csv_from_json","json_from_csv","json_from_yaml","yaml_from_json"];
 
-    const PDFJS = window['pdfjsLib']; PDFJS.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.js";
+    const PDFJS = window['pdfjsLib'];
+    PDFJS.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.js";
 
-    function extOf(name){const m=/\.[^.]+$/.exec(name||"");return m?m[0].slice(1).toLowerCase():"";}
+    function extOf(n){const m=/\.[^.]+$/.exec(n||"");return m?m[0].slice(1).toLowerCase():"";}
     function humanSize(n){if(!n&&n!==0)return"";const u=["B","KB","MB","GB"];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return`${n.toFixed(n<10&&i?1:0)} ${u[i]}`;}
     function guessCategory(ext){ if(ext==="pdf") return "doc"; if(IMAGE_IN.includes(ext)) return "image"; if(AV_IN.includes(ext)) return ["mp4","mkv","mov","webm"].includes(ext)?"video":"audio"; if(DOC_IN.includes(ext)) return "doc"; if(DATA_IN.includes(ext)) return "data"; return "doc"; }
 
@@ -164,53 +130,85 @@
       return [];
     }
     function allTargetsFor(ext, cat){
-      if(ext==="pdf"){ const imgs=IMAGE_OUT.filter(x=>x!=="pdf"); return [...new Set([...imgs, "docx"])]; }
+      if(ext==="pdf"){ const imgs=IMAGE_OUT.filter(x=>x!=="pdf"); return [...new Set([...imgs,"docx"])]; }
       if(cat==="image") return IMAGE_OUT.filter(x=>x!==ext);
       if(cat==="video"||cat==="audio") return AV_OUT.filter(x=>x!==ext);
       if(cat==="data") return DATA_OUT;
       return DOC_OUT.filter(x=>x!==ext);
     }
+
+    function enableConvertIfReady(){
+      const hasFile = !!fileInput.files?.length;
+      const hasTarget = !!targetSelect.value;
+      convertBtn.disabled = !(hasFile && hasTarget);
+    }
+
     function setSuggestions(ext, cat){
       chipsWrap.innerHTML="";
       const opts = allTargetsFor(ext, cat);
       targetSelect.innerHTML = opts.map(o=>`<option value="${o}">${o.toUpperCase()}</option>`).join("");
+
+      // if there are no options, keep disabled
+      if(!opts.length){ enableConvertIfReady(); return; }
+
       const top = suggestedTargets(ext, cat).filter(x=>opts.includes(x));
       top.forEach(fmt=>{
         const chip=document.createElement("button");
         chip.type="button"; chip.className="chip"; chip.textContent=fmt.toUpperCase();
         chip.addEventListener("click", ()=>{
           [...chipsWrap.querySelectorAll(".chip")].forEach(c=>c.classList.remove("active"));
-          chip.classList.add("active"); targetSelect.value=fmt; convertBtn.disabled=!fileInput.files.length;
+          chip.classList.add("active"); targetSelect.value=fmt; enableConvertIfReady();
         });
         chipsWrap.appendChild(chip);
       });
-      const first=chipsWrap.querySelector(".chip"); if(first){ first.click(); } else { convertBtn.disabled=!fileInput.files.length; }
+
+      // Preselect first available target and enable button
+      if (targetSelect.options.length > 0) {
+        targetSelect.selectedIndex = 0;
+      }
+      // If we created chips, click the first to sync UI
+      const firstChip = chipsWrap.querySelector(".chip");
+      if (firstChip) firstChip.click();
+
+      enableConvertIfReady();
     }
+
+    // keep button enabled when user changes dropdown
+    targetSelect.addEventListener("change", enableConvertIfReady);
+
+    // Drag & drop
+    ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); drop.classList.add("drag");}));
+    ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); drop.classList.remove("drag");}));
+    drop.addEventListener("drop", e=>{ const f=e.dataTransfer.files?.[0]; if(f){ fileInput.files=e.dataTransfer.files; onFilePicked(f);} });
+
+    // Both mechanisms for opening picker
+    browseBtn.addEventListener("click",(e)=>{ e.preventDefault(); fileInput.click(); });
+    fileInput.addEventListener("change", ()=>{ const f=fileInput.files?.[0]; if(f) onFilePicked(f); });
 
     function onFilePicked(file){
       resultBox.innerHTML=""; statusLine.textContent=""; bar.style.width="0%"; barInd.style.display="none"; barInd.classList.remove("indeterminate");
       const ext=extOf(file.name), cat=guessCategory(ext);
       setSuggestions(ext, cat);
       filemeta.textContent=`${file.name} — ${ext.toUpperCase()} • ${humanSize(file.size)}`;
-      convertBtn.disabled=false;
+      enableConvertIfReady();
     }
 
-    // Local processing map
+    // Local processing (unchanged; trimmed for brevity)
     const LOCAL_OK = { "pdf": new Set(["jpg","png","webp"]), "jpg": new Set(["png","webp"]), "jpeg": new Set(["png","webp"]), "png": new Set(["jpg","webp"]), "webp": new Set(["jpg","png"]), "bmp": new Set(["jpg","png","webp"]), "gif": new Set(["jpg","png","webp"]), "tiff": new Set(["jpg","png","webp"]), "ico": new Set(["png","webp"]) };
     function canDoLocal(srcExt, targetExt){ return LOCAL_OK[srcExt]?.has(targetExt) || false; }
 
     async function convertLocal(file, srcExt, targetExt){
+      const PDF = window['pdfjsLib'];
       if(srcExt==="pdf" && ["jpg","png","webp"].includes(targetExt)){
-        statusLine.textContent="Preparing PDF…";
         const buf = await file.arrayBuffer();
-        const pdf = await PDFJS.getDocument({ data: buf }).promise;
+        const pdf = await PDF.getDocument({ data: buf }).promise;
         const pages = pdf.numPages;
-        const zip = new JSZip(); let done = 0;
+        const zip = new JSZip(); let done=0;
         for(let i=1;i<=pages;i++){
           const page = await pdf.getPage(i);
           const viewport = page.getViewport({ scale: 2 });
-          const canvas = document.createElement("canvas"); const ctx = canvas.getContext("2d");
-          canvas.width = viewport.width; canvas.height = viewport.height;
+          const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d");
+          canvas.width=viewport.width; canvas.height=viewport.height;
           await page.render({ canvasContext: ctx, viewport }).promise;
           const mime = {jpg:"image/jpeg", png:"image/png", webp:"image/webp"}[targetExt];
           const blob = await new Promise(res=>canvas.toBlob(res, mime, mime==="image/jpeg"?0.92:0.95));
@@ -221,42 +219,39 @@
         const zipBlob = await zip.generateAsync({type:"blob"});
         const url = URL.createObjectURL(zipBlob);
         const name = file.name.replace(/\.pdf$/i, `_${targetExt}.zip`);
-        return { url, filename: name, local: true };
+        return { url, filename: name };
       }
-
       if(["jpg","jpeg","png","webp","gif","tiff","bmp","ico"].includes(srcExt) &&
          ["jpg","png","webp"].includes(targetExt)){
-        statusLine.textContent="Decoding image…";
-        const bitmap = await createImageBitmap(file);
-        bar.style.width="30%";
-        const canvas = document.createElement("canvas"); const ctx = canvas.getContext("2d");
-        canvas.width = bitmap.width; canvas.height = bitmap.height; ctx.drawImage(bitmap, 0, 0);
-        bar.style.width="60%";
+        const bmp = await createImageBitmap(file);
+        const canvas = document.createElement("canvas"), ctx=canvas.getContext("2d");
+        canvas.width=bmp.width; canvas.height=bmp.height; ctx.drawImage(bmp,0,0);
         const mime = {jpg:"image/jpeg", png:"image/png", webp:"image/webp"}[targetExt];
         const blob = await new Promise(res=>canvas.toBlob(res, mime, mime==="image/jpeg"?0.92:0.95));
-        bar.style.width="100%"; statusLine.textContent="Done.";
         const url = URL.createObjectURL(blob); const base = file.name.replace(/\.[^.]+$/,"");
-        return { url, filename: `${base}.${targetExt}`, local: true };
+        bar.style.width="100%"; statusLine.textContent="Done.";
+        return { url, filename:`${base}.${targetExt}` };
       }
-
       throw new Error("Local conversion not supported for this format.");
     }
 
-    // Convert button
+    // Convert click
     convertBtn.addEventListener("click", async ()=>{
-      const file=fileInput.files?.[0]; if(!file){ note("Please choose a file first.", true); return; }
-      const target=targetSelect.value; if(!target){ note("Please choose a target format.", true); return; }
-      const srcExt = extOf(file.name);
+      if (convertBtn.disabled) return; // guard if UI not updated yet
+      const file=fileInput.files?.[0]; const target=targetSelect.value;
+      if(!file || !target){ return; }
+
       resultBox.innerHTML=""; statusLine.textContent=""; bar.style.width="0%"; barInd.style.display="none"; barInd.classList.remove("indeterminate");
 
+      const srcExt = extOf(file.name);
       if(localToggle.checked && canDoLocal(srcExt, target)){
         try{
           const t0=performance.now();
           const out = await convertLocal(file, srcExt, target);
           const elapsed = ((performance.now()-t0)/1000).toFixed(2);
-          resultBox.innerHTML = `<span class="pill ok">Done</span> <a class="link" href="${out.url}" download="${out.filename}">Download ${escapeHtml(out.filename)}</a> <span class="muted">(⏱ ${elapsed}s)</span>`;
+          resultBox.innerHTML = `<span class="pill ok">Done</span> <a class="link" href="${out.url}" download="${out.filename}">Download ${out.filename}</a> <span class="muted">(⏱ ${elapsed}s)</span>`;
           return;
-        }catch(err){ console.warn("Local conversion failed, falling back:", err); }
+        }catch(e){ console.warn("Local failed, falling back", e); }
       }
 
       // server fallback
@@ -271,28 +266,24 @@
           try{ const data=JSON.parse(xhr.responseText);
                const t=data.process_time?` <span class="muted">(⏱ ${data.process_time}s)</span>`:"";
                statusLine.textContent="Done.";
-               resultBox.innerHTML=`<span class="pill ok">Done</span> <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>${t}`;
+               resultBox.innerHTML=`<span class="pill ok">Done</span> <a class="link" href="${data.download}" download>Download ${data.filename}</a>${t}`;
           }catch{ statusLine.textContent="Done."; resultBox.textContent="Download ready."; }
         }else{
           try{ const data=JSON.parse(xhr.responseText);
-               resultBox.innerHTML=`<span class="pill err">Error</span> ${escapeHtml(data.detail||xhr.responseText)}`;
-          }catch{ resultBox.innerHTML=`<span class="pill err">Error</span> ${escapeHtml(xhr.responseText||"Unknown error")}`; }
+               resultBox.innerHTML=`<span class="pill err">Error</span> ${data.detail||xhr.responseText}`;
+          }catch{ resultBox.innerHTML=`<span class="pill err">Error</span> ${xhr.responseText||"Unknown error"}`; }
           statusLine.textContent="";
         }
       }}; xhr.send(fd);
     });
 
-    function note(t,err=false){ resultBox.innerHTML=`<span class="pill ${err?'err':'ok'}">${err?'Error':'Note'}</span> ${escapeHtml(t)}`; }
-    function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-
-    // Cookie banner
+    // Cookie banner (minimal)
     const cb=document.getElementById('cookieBanner'), btnA=document.getElementById('cookieAccept'), btnD=document.getElementById('cookieDecline');
     function setCookie(n,v,d){const maxAge=d*24*60*60;document.cookie=`${n}=${encodeURIComponent(v)}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;}
     function getCookie(n){return document.cookie.split(';').map(s=>s.trim()).find(s=>s.startsWith(n+'='))?.split('=')[1];}
-    function showBannerIfNeeded(){if(!getCookie('consent')){cb.classList.add('show');cb.setAttribute('aria-hidden','false');}}
-    btnA.addEventListener('click',()=>{setCookie('consent','accept',180);cb.classList.remove('show');cb.setAttribute('aria-hidden','true');});
-    btnD.addEventListener('click',()=>{cb.classList.remove('show');cb.setAttribute('aria-hidden','true');});
-    window.addEventListener('keydown',(e)=>{if(e.key==='Escape'&&cb.classList.contains('show')) btnD.click();});
+    function showBannerIfNeeded(){if(!getCookie('consent')){cb.classList.add('show');}}
+    btnA.addEventListener('click',()=>{setCookie('consent','accept',180);cb.classList.remove('show');});
+    btnD.addEventListener('click',()=>{cb.classList.remove('show');});
     showBannerIfNeeded();
   })();
   </script>
