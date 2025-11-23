@@ -1,11 +1,17 @@
 # --- ADD near the top with the other imports ---
+import os
 import io
+import re
 import csv
 import json
 import yaml
-import phonenumbers
+import shutil
+import subprocess
 import pandas as pd
+import phonenumbers
 import vobject
+from pathlib import Path
+from typing import Literal
 
 # ------------- DATA CONVERTERS (unique features) -----------------
 
