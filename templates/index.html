@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Any2Any — Free Online File Converter</title>
-<meta name="description" content="Convert images, videos, audio and documents online. Fast, private, and free. No tracking, no storage. Files auto-delete after conversion.">
+<meta name="description" content="Convert images, videos, audio, documents, subtitles, contacts and data online. Fast, private, and free. Files are processed temporarily and auto-delete.">
 <style>
   :root{
     --bg:#0b1020;--panel:#0f1630;--card:#121a3a;--muted:#9ab0d6;
@@ -19,7 +19,6 @@
 
   .grid{display:grid;gap:16px;grid-template-columns:1fr; margin-top:18px}
   @media(min-width:900px){.grid{grid-template-columns:1.2fr .8fr}}
-
   .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
 
   .drop{border:2px dashed var(--line);background:var(--card);border-radius:16px;padding:22px;display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center;transition:.2s}
@@ -48,15 +47,29 @@
   .pill.err{background:#2f1010;border-color:#6a2a2a}
   a.link{color:#7fb2ff;text-decoration:none}
 
-  .footer{margin-top:18px;font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .footer{margin-top:18px;font-size:12px;color:#9ab0d6;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .footer a{color:#7fb2ff;text-decoration:none}
+
+  /* --- Cookie banner (polite) --- */
+  .cookie-banner{
+    position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 50;
+    background: #121a3a; border:1px solid #1f2a4a; color:#e7ecf5;
+    border-radius: 14px; padding: 12px 14px; display: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  .cookie-banner.show{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .cookie-banner p{ margin:0; font-size: 14px; color:#9ab0d6 }
+  .cookie-actions{ margin-left: auto; display:flex; gap:8px; }
+  .cookie-btn{ border:1px solid #1f2a4a; background:#0b1020; color:#e7ecf5; padding:8px 12px; border-radius:10px; cursor:pointer }
+  .cookie-btn.primary{ background:#2a66ff; border:none; font-weight:600 }
+  .cookie-btn:focus{ outline: 2px solid #5ea1ff; outline-offset:2px }
 </style>
 </head>
 <body>
   <div class="wrap">
     <div class="hero">
       <h1>Any2Any File Converter</h1>
-      <div class="muted">Fast, private, and free. No cookies. No analytics. <strong>We never store your files</strong> — they are processed temporarily and auto-deleted after conversion.</div>
+      <div class="muted">Fast, private, and free. We never store your files — they are processed temporarily and auto-deleted after conversion.</div>
 
       <div class="grid">
         <!-- Left: drop zone + progress/result -->
@@ -96,8 +109,8 @@
           </details>
 
           <div class="muted" style="margin-top:10px">
-            Tips: HEIC→JPG • DOCX→PDF • MP4→MP3 • PDF→DOCX<br/>
-            Max file: <strong>50MB</strong> (configurable). No sign-up required.
+            Tips: HEIC→JPG • DOCX→PDF • MP4→MP3 • PDF→DOCX •
+            <strong>Phone list → Clean CSV</strong> • <strong>VCF⇄CSV</strong> • <strong>SRT⇄VTT</strong>
           </div>
         </div>
       </div>
@@ -108,6 +121,15 @@
         <a href="/cookies">Cookies</a> ·
         <span>Files auto-delete after ~20 minutes. We do not save files or personal data.</span>
       </div>
+    </div>
+  </div>
+
+  <!-- Cookie banner -->
+  <div id="cookieBanner" class="cookie-banner" role="dialog" aria-live="polite" aria-label="Cookie consent">
+    <p>We use a small cookie to remember your choice. No tracking, no ads. <a href="/cookies" class="link">Learn more</a>.</p>
+    <div class="cookie-actions">
+      <button id="cookieAccept" class="cookie-btn primary">Accept</button>
+      <button id="cookieDecline" class="cookie-btn" aria-label="Decline and continue">Decline</button>
     </div>
   </div>
 
@@ -125,133 +147,132 @@
     const convertBtn = $("#convertBtn");
     const resultBox = $("#result");
 
+    // Supported formats (must match backend)
     const IMAGE_IN = ["jpg","jpeg","png","webp","gif","tiff","bmp","ico","pdf"];
-    const AV_IN     = ["mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"];
-    const DOC_IN    = ["pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"];
+    const AV_IN    = ["mp3","wav","aac","flac","ogg","mp4","mkv","mov","webm"];
+    const DOC_IN   = ["pdf","doc","docx","ppt","pptx","xls","xlsx","odt","odp","ods","rtf","txt"];
+    const DATA_IN  = ["csv","xlsx","txt","vcf","srt","vtt","json","yaml","yml"];
+
     const IMAGE_OUT = IMAGE_IN;
     const AV_OUT    = AV_IN;
-    const DOC_OUT   = ["pdf","docx","xlsx","pptx","odt","ods","odp"];
+    const DOC_OUT   = ["pdf","docx","pptx","xlsx","odt","odp","ods"];
+    const DATA_OUT  = [
+      "phonecsv",  // phone list cleaner
+      "csv","vcf", // contacts
+      "srt","vtt", // subtitles
+      "csv_from_json","json_from_csv","json_from_yaml","yaml_from_json"
+    ];
 
-    function extOf(name){ const m = /\.[^.]+$/.exec(name||""); return m ? m[0].slice(1).toLowerCase() : ""; }
-    function humanSize(n){ if(!n && n!==0) return ""; const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++} return `${n.toFixed(n<10&&i?1:0)} ${u[i]}`; }
+    function extOf(name){ const m=/\.[^.]+$/.exec(name||""); return m?m[0].slice(1).toLowerCase():""; }
+    function humanSize(n){ if(!n&&n!==0) return ""; const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++} return `${n.toFixed(n<10&&i?1:0)} ${u[i]}`; }
 
-    // Suggestions per category
     const SUGGEST = {
       image: ["jpg","png","webp","pdf"],
-      video: ["mp4","webm","mov","mp3"], // mp3 = extract audio
+      video: ["mp4","webm","mov","mp3"],
       audio: ["mp3","wav","aac","flac"],
-      doc:   ["pdf","docx","pptx","xlsx"]
+      doc:   ["pdf","docx","pptx","xlsx"],
+      data:  ["phonecsv","csv","vcf","vtt","srt","csv_from_json","json_from_csv"]
     };
 
     function guessCategory(ext){
       if(IMAGE_IN.includes(ext)) return "image";
-      if(AV_IN.includes(ext)){
-        if(["mp4","mkv","mov","webm"].includes(ext)) return "video";
-        return "audio";
-      }
+      if(AV_IN.includes(ext)){ return ["mp4","mkv","mov","webm"].includes(ext) ? "video" : "audio"; }
       if(DOC_IN.includes(ext)) return "doc";
+      if(DATA_IN.includes(ext)) return "data";
       return "doc";
     }
-
     function allTargetsFor(cat){
       if(cat==="image") return IMAGE_OUT;
       if(cat==="video"||cat==="audio") return AV_OUT;
+      if(cat==="data") return DATA_OUT;
       return DOC_OUT;
     }
 
     function setSuggestions(cat){
       chipsWrap.innerHTML = "";
       const opts = allTargetsFor(cat);
-      // populate <select> (all formats)
       targetSelect.innerHTML = opts.map(o=>`<option value="${o}">${o.toUpperCase()}</option>`).join("");
-
-      // chips = top formats for that category
-      const top = (SUGGEST[cat] || []).filter(x => opts.includes(x));
+      const top = (SUGGEST[cat]||[]).filter(x=>opts.includes(x));
       top.forEach(fmt=>{
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "chip";
-        chip.textContent = fmt.toUpperCase();
+        const chip=document.createElement("button");
+        chip.type="button"; chip.className="chip"; chip.textContent=fmt.toUpperCase();
         chip.addEventListener("click", ()=>{
           [...chipsWrap.querySelectorAll(".chip")].forEach(c=>c.classList.remove("active"));
-          chip.classList.add("active");
-          targetSelect.value = fmt;
-          convertBtn.disabled = !fileInput.files.length;
+          chip.classList.add("active"); targetSelect.value=fmt; convertBtn.disabled=!fileInput.files.length;
         });
         chipsWrap.appendChild(chip);
       });
-
-      const first = chipsWrap.querySelector(".chip");
-      if(first){ first.click(); }
+      const first = chipsWrap.querySelector(".chip"); if(first) first.click();
     }
 
-    // --- Drag & drop -----------------------------------------------------------
-    ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {e.preventDefault(); drop.classList.add("drag");}));
-    ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => {e.preventDefault(); drop.classList.remove("drag");}));
-    drop.addEventListener("drop", (e)=>{
-      const f = e.dataTransfer.files?.[0];
-      if(f){ fileInput.files = e.dataTransfer.files; onFilePicked(f); }
-    });
+    // Drag & drop
+    ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); drop.classList.add("drag");}));
+    ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); drop.classList.remove("drag");}));
+    drop.addEventListener("drop", e=>{ const f=e.dataTransfer.files?.[0]; if(f){ fileInput.files=e.dataTransfer.files; onFilePicked(f);} });
     browseBtn.addEventListener("click", ()=> fileInput.click());
-    fileInput.addEventListener("change", ()=> {
-      const f = fileInput.files?.[0];
-      if(f) onFilePicked(f);
-    });
+    fileInput.addEventListener("change", ()=>{ const f=fileInput.files?.[0]; if(f) onFilePicked(f); });
 
     function onFilePicked(file){
-      resultBox.innerHTML = "";
-      bar.style.width = "0%";
-      const ext = extOf(file.name);
-      const cat = guessCategory(ext);
-      setSuggestions(cat);
-      filemeta.textContent = `${file.name} — ${ext.toUpperCase()} • ${humanSize(file.size)}`;
-      convertBtn.disabled = false;
+      resultBox.innerHTML=""; bar.style.width="0%";
+      const ext=extOf(file.name), cat=guessCategory(ext);
+      setSuggestions(cat); filemeta.textContent=`${file.name} — ${ext.toUpperCase()} • ${humanSize(file.size)}`;
+      convertBtn.disabled=false;
     }
 
-    // --- Convert action --------------------------------------------------------
-    convertBtn.addEventListener("click", async ()=>{
-      const file = fileInput.files?.[0];
-      if(!file){ note("Please choose a file first.", true); return; }
-      const target = targetSelect.value;
-      if(!target){ note("Please choose a target format.", true); return; }
+    // Convert
+    convertBtn.addEventListener("click", ()=>{
+      const file=fileInput.files?.[0]; if(!file){ note("Please choose a file first.", true); return; }
+      const target=targetSelect.value; if(!target){ note("Please choose a target format.", true); return; }
+      resultBox.innerHTML=""; bar.style.width="0%";
 
-      resultBox.innerHTML = "";
-      bar.style.width = "0%";
-
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("target", target);
-
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/convert");
-      xhr.upload.onprogress = (ev) => {
-        if (ev.lengthComputable) bar.style.width = Math.round((ev.loaded / ev.total) * 100) + "%";
-      };
-      xhr.onreadystatechange = () => {
-        if (xhr.readyState === XMLHttpRequest.DONE) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            if (xhr.status === 200) {
-              resultBox.innerHTML = `
-                <span class="pill ok">Done</span>
-                <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>`;
-            } else {
-              resultBox.innerHTML = `<span class="pill err">Error</span> ${escapeHtml(data.detail || xhr.responseText)}`;
-            }
-          } catch {
-            resultBox.textContent = xhr.responseText || "Unknown error";
+      const fd=new FormData(); fd.append("file", file); fd.append("target", target);
+      const xhr=new XMLHttpRequest(); xhr.open("POST","/api/convert");
+      xhr.upload.onprogress=(ev)=>{ if(ev.lengthComputable) bar.style.width=Math.round((ev.loaded/ev.total)*100)+"%"; };
+      xhr.onreadystatechange=()=>{ if(xhr.readyState===XMLHttpRequest.DONE){
+        try{ const data=JSON.parse(xhr.responseText);
+          if(xhr.status===200){
+            resultBox.innerHTML=`<span class="pill ok">Done</span> <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>`;
+          }else{
+            resultBox.innerHTML=`<span class="pill err">Error</span> ${escapeHtml(data.detail||xhr.responseText)}`;
           }
-        }
-      };
+        }catch{ resultBox.textContent=xhr.responseText||"Unknown error"; }
+      }};
       xhr.send(fd);
     });
 
-    function note(text, isErr=false){
-      resultBox.innerHTML = `<span class="pill ${isErr?'err':'ok'}">${isErr?'Error':'Note'}</span> ${escapeHtml(text)}`;
+    function note(t, err=false){ resultBox.innerHTML=`<span class="pill ${err?'err':'ok'}">${err?'Error':'Note'}</span> ${escapeHtml(t)}`; }
+    function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+    // --- Cookie consent (polite) ---------------------------------------------
+    const cb = document.getElementById('cookieBanner');
+    const btnA = document.getElementById('cookieAccept');
+    const btnD = document.getElementById('cookieDecline');
+
+    function setCookie(name, value, days){
+      const maxAge = days*24*60*60;
+      document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;
     }
-    function escapeHtml(s){
-      return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    function getCookie(name){
+      return document.cookie.split(';').map(s=>s.trim()).find(s=>s.startsWith(name+'='))?.split('=')[1];
     }
+    function showBannerIfNeeded(){
+      const c = getCookie('consent');
+      if(!c){ cb.classList.add('show'); cb.setAttribute('aria-hidden','false'); }
+    }
+    function onAccept(){
+      setCookie('consent','accept', 180);
+      cb.classList.remove('show'); cb.setAttribute('aria-hidden','true');
+      // If you ever add analytics, load them here AFTER consent:
+      // loadAnalytics();
+    }
+    function onDecline(){
+      cb.classList.remove('show'); cb.setAttribute('aria-hidden','true');
+    }
+    btnA.addEventListener('click', onAccept);
+    btnD.addEventListener('click', onDecline);
+    window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && cb.classList.contains('show')) onDecline(); });
+    showBannerIfNeeded();
+    function loadAnalytics(){ /* add analytics tag here later */ }
   </script>
 </body>
 </html>
