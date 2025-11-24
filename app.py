@@ -20,7 +20,7 @@ from converters import (
 
 app = FastAPI(title="Any2Any Converter")
 
-# CORS (ok to keep open for now)
+# CORS (open for now; restrict later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

@@ -1,5 +1,4 @@
-# converters.py
-# Progress-enabled converters for Any2Any
+# converters.py — progress-enabled converters for Any2Any
 
 import os, csv, json, shutil, tempfile, subprocess, secrets, zipfile
 from pathlib import Path
@@ -142,7 +141,7 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
     produced_pngs = []
     for i in range(1, total_pages + 1):
         prefix = work / f"page-{i}"
-        # IMPORTANT: split -r and its value (some Poppler builds reject '-r200')
+        # IMPORTANT: split -r and value (some Poppler builds reject '-r200')
         cmd = [
             "pdftoppm",
             "-png",
@@ -160,7 +159,6 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
                 f"CMD: {' '.join(cmd)}\n"
                 f"STDERR:\n{proc.stderr.decode(errors='ignore')}"
             )
-
         cand = (work / f"page-{i}-1.png")
         if not cand.exists():
             cand = (work / f"page-{i}.png")
@@ -170,7 +168,6 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
         produced_pngs.append(cand)
         _report(progress, (i/total_pages)*70.0, f"Rendered page {i}/{total_pages}")
 
-    from PIL import Image
     images_for_zip = []
     for idx, p in enumerate(produced_pngs, 1):
         if target in {"png"}:
@@ -195,6 +192,39 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
     _report(progress, 100.0, "Done")
     return out_zip
 
+def convert_image(src_path: Path, target: str, progress=None) -> Path:
+    target = target.lower()
+    src_ext = src_path.suffix.lower().lstrip(".")
+
+    if src_ext == "pdf":
+        return _pdf_to_images_zip(src_path, target, progress=progress)
+
+    if target not in {"jpg","jpeg","png","webp","ico"}:
+        raise RuntimeError(f"Unsupported image target: {target}")
+
+    _report(progress, 5, "Opening image")
+    with Image.open(src_path) as im:
+        if target in {"jpg","jpeg"} and im.mode in ("RGBA","P"):
+            im = im.convert("RGB")
+        elif im.mode == "P":
+            im = im.convert("RGBA")
+
+        out_ext = "jpg" if target == "jpeg" else target
+        out = _rand_name(out_ext)
+
+        save_kwargs = {}
+        if out_ext == "jpg":  save_kwargs.update(dict(quality=92, optimize=True, progressive=True))
+        if out_ext == "webp": save_kwargs.update(dict(quality=90, method=4))
+        _report(progress, 50, "Encoding")
+        if out_ext == "ico":
+            icon = ImageOps.contain(im, (256, 256))
+            icon.save(out, format="ICO")
+        else:
+            fmt = {"jpg":"JPEG","png":"PNG","webp":"WEBP"}[out_ext]
+            im.save(out, format=fmt, **save_kwargs)
+
+    _report(progress, 100, "Done")
+    return out
 
 # ===================== AUDIO / VIDEO ========================
 def convert_av(src_path: Path, target: str, progress=None) -> Path:
@@ -221,7 +251,7 @@ def data_srt_to_vtt(src_path: Path) -> Path:
         f_out.write("WEBVTT\n\n")
         for line in f_in:
             s = line.rstrip("\n")
-            if s.strip().isdigit():  # drop indices
+            if s.strip().isdigit():
                 continue
             if "-->" in s:
                 s = s.replace(",", ".")
