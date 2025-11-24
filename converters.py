@@ -142,11 +142,25 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
     produced_pngs = []
     for i in range(1, total_pages + 1):
         prefix = work / f"page-{i}"
-        cmd = ["pdftoppm", "-png", f"-r{dpi}", "-f", str(i), "-l", str(i), str(src_path), str(prefix)]
+        # IMPORTANT: split -r and its value (some Poppler builds reject '-r200')
+        cmd = [
+            "pdftoppm",
+            "-png",
+            "-r", str(dpi),
+            "-f", str(i),
+            "-l", str(i),
+            str(src_path),
+            str(prefix),
+        ]
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if proc.returncode != 0:
             shutil.rmtree(work, ignore_errors=True)
-            raise RuntimeError(f"pdftoppm failed on page {i} (exit {proc.returncode}).\nSTDERR:\n{proc.stderr.decode(errors='ignore')}")
+            raise RuntimeError(
+                f"pdftoppm failed on page {i} (exit {proc.returncode}).\n"
+                f"CMD: {' '.join(cmd)}\n"
+                f"STDERR:\n{proc.stderr.decode(errors='ignore')}"
+            )
+
         cand = (work / f"page-{i}-1.png")
         if not cand.exists():
             cand = (work / f"page-{i}.png")
@@ -156,6 +170,7 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
         produced_pngs.append(cand)
         _report(progress, (i/total_pages)*70.0, f"Rendered page {i}/{total_pages}")
 
+    from PIL import Image
     images_for_zip = []
     for idx, p in enumerate(produced_pngs, 1):
         if target in {"png"}:
@@ -180,39 +195,6 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
     _report(progress, 100.0, "Done")
     return out_zip
 
-def convert_image(src_path: Path, target: str, progress=None) -> Path:
-    target = target.lower()
-    src_ext = src_path.suffix.lower().lstrip(".")
-
-    if src_ext == "pdf":
-        return _pdf_to_images_zip(src_path, target, progress=progress)
-
-    if target not in {"jpg","jpeg","png","webp","ico"}:
-        raise RuntimeError(f"Unsupported image target: {target}")
-
-    _report(progress, 5, "Opening image")
-    with Image.open(src_path) as im:
-        if target in {"jpg","jpeg"} and im.mode in ("RGBA","P"):
-            im = im.convert("RGB")
-        elif im.mode == "P":
-            im = im.convert("RGBA")
-
-        out_ext = "jpg" if target == "jpeg" else target
-        out = _rand_name(out_ext)
-
-        save_kwargs = {}
-        if out_ext == "jpg":  save_kwargs.update(dict(quality=92, optimize=True, progressive=True))
-        if out_ext == "webp": save_kwargs.update(dict(quality=90, method=4))
-        _report(progress, 50, "Encoding")
-        if out_ext == "ico":
-            icon = ImageOps.contain(im, (256, 256))
-            icon.save(out, format="ICO")
-        else:
-            fmt = {"jpg":"JPEG","png":"PNG","webp":"WEBP"}[out_ext]
-            im.save(out, format=fmt, **save_kwargs)
-
-    _report(progress, 100, "Done")
-    return out
 
 # ===================== AUDIO / VIDEO ========================
 def convert_av(src_path: Path, target: str, progress=None) -> Path:
