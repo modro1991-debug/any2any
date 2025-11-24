@@ -25,7 +25,6 @@
   const DOC_OUT   = ["pdf","docx","pptx","xlsx","odt","odp","ods"];
   const DATA_OUT  = ["phonecsv","csv","vcf","srt","vtt","csv_from_json","json_from_csv","json_from_yaml","yaml_from_json"];
 
-  // Local conversion availability
   const LOCAL_OK = {
     "pdf": new Set(["jpg","png","webp"]),            // all pages -> zip
     "jpg": new Set(["png","webp"]),
@@ -38,11 +37,10 @@
     "ico": new Set(["png","webp"]),
   };
 
-  // Helpers
   function extOf(name){ const m=/\.[^.]+$/.exec(name||""); return m?m[0].slice(1).toLowerCase():""; }
   function humanSize(n){ if(!n&&n!==0) return ""; const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++} return `${n.toFixed(n<10&&i?1:0)} ${u[i]}`; }
   function guessCategory(ext){
-    if (ext === "pdf") return "doc"; // so DOCX shows; we still allow PDF->images in local mode
+    if (ext === "pdf") return "doc";
     if (IMAGE_IN.includes(ext)) return "image";
     if (AV_IN.includes(ext)) return ["mp4","mkv","mov","webm"].includes(ext) ? "video" : "audio";
     if (DOC_IN.includes(ext)) return "doc";
@@ -93,7 +91,6 @@
       chipsWrap.appendChild(chip);
     });
 
-    // default selection
     if (targetSelect.options.length > 0) targetSelect.selectedIndex = 0;
     const firstChip = chipsWrap.querySelector(".chip");
     if (firstChip) firstChip.click();
@@ -107,7 +104,6 @@
   async function convertLocal(file, srcExt, targetExt){
     const PDFJS = window['pdfjsLib'];
 
-    // PDF -> images (all pages) -> ZIP
     if (srcExt === "pdf" && ["jpg","png","webp"].includes(targetExt)){
       statusLine.textContent = "Preparing PDF…";
       const buf = await file.arrayBuffer();
@@ -139,7 +135,6 @@
       return { url, filename: name };
     }
 
-    // Image -> image (jpg/png/webp)
     if (["jpg","jpeg","png","webp","gif","tiff","bmp","ico"].includes(srcExt) &&
         ["jpg","png","webp"].includes(targetExt)){
       statusLine.textContent = "Decoding image…";
@@ -162,10 +157,8 @@
     throw new Error("Local conversion not supported for this format.");
   }
 
-  // ---------- UI events ----------
   targetSelect.addEventListener("change", enableConvertIfReady);
 
-  // Drag & drop
   ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("drag"); }));
   ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("drag"); }));
   drop.addEventListener("drop", e => {
@@ -173,7 +166,6 @@
     if (f){ fileInput.files = e.dataTransfer.files; onFilePicked(f); }
   });
 
-  // File picker change
   fileInput.addEventListener("change", () => {
     const f = fileInput.files?.[0];
     if (!f) return;
@@ -181,19 +173,16 @@
   });
 
   function onFilePicked(file){
-    // reset UI
     resultBox.innerHTML = "";
     statusLine.textContent = "";
     bar.style.width = "0%";
     barInd.style.display = "none";
     barInd.classList.remove("indeterminate");
 
-    // populate targets
     const ext = extOf(file.name);
     const cat = guessCategory(ext);
     setSuggestions(ext, cat);
 
-    // file meta
     filemeta.textContent = `${file.name} — ${ext.toUpperCase()} • ${humanSize(file.size)}`;
     enableConvertIfReady();
   }
@@ -205,7 +194,6 @@
     const target = targetSelect.value;
     if (!file || !target) return;
 
-    // reset progress
     resultBox.innerHTML = "";
     statusLine.textContent = "";
     bar.style.width = "0%";
@@ -214,7 +202,7 @@
 
     const srcExt = extOf(file.name);
 
-    // Local conversion path
+    // Local path first (if supported)
     if (localToggle.checked && canDoLocal(srcExt, target)){
       try{
         const t0 = performance.now();
@@ -224,11 +212,10 @@
         return;
       }catch(err){
         console.warn("Local conversion failed, falling back to server:", err);
-        // fall through to server path
       }
     }
 
-    // Server conversion path
+    // ---- Server conversion path with progress polling ----
     statusLine.textContent = "Uploading…";
     const fd = new FormData();
     fd.append("file", file);
@@ -237,20 +224,12 @@
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/convert");
 
-    // Helpful error handlers
     xhr.onerror = () => {
-      barInd.classList.remove("indeterminate");
-      barInd.style.display = "none";
       resultBox.innerHTML = `<span class="pill err">Error</span> Network error while uploading.`;
       statusLine.textContent = "";
-    };
-    xhr.onabort = () => {
       barInd.classList.remove("indeterminate");
       barInd.style.display = "none";
-      resultBox.innerHTML = `<span class="pill err">Cancelled</span> Upload was aborted.`;
-      statusLine.textContent = "";
     };
-
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable){
         bar.style.width = Math.round((ev.loaded/ev.total)*100) + "%";
@@ -265,28 +244,51 @@
 
     xhr.onreadystatechange = () => {
       if (xhr.readyState === XMLHttpRequest.DONE){
-        barInd.classList.remove("indeterminate");
-        barInd.style.display = "none";
-
-        if (xhr.status === 200){
-          try{
-            const data = JSON.parse(xhr.responseText);
-            const t = data.process_time ? ` <span class="muted">(⏱ ${data.process_time}s)</span>` : "";
-            statusLine.textContent = "Done.";
-            resultBox.innerHTML = `<span class="pill ok">Done</span> <a class="link" href="${data.download}" download>Download ${escapeHtml(data.filename)}</a>${t}`;
-          }catch{
-            statusLine.textContent = "Done.";
-            resultBox.textContent = "Download ready.";
+        if (xhr.status === 200 || xhr.status === 202){
+          let data = {};
+          try { data = JSON.parse(xhr.responseText); } catch {}
+          if (!data.job_id){
+            resultBox.innerHTML = `<span class="pill err">Error</span> Unexpected server response.`;
+            barInd.classList.remove("indeterminate");
+            barInd.style.display = "none";
+            return;
           }
+          const jobId = data.job_id;
+          barInd.classList.remove("indeterminate");
+          barInd.style.display = "none";
+
+          let pollTimer = null;
+          const poll = async () => {
+            try{
+              const r = await fetch(`/api/status/${jobId}`);
+              if (!r.ok) throw new Error(`HTTP ${r.status}`);
+              const s = await r.json();
+              const pct = Math.max(0, Math.min(100, Math.round(s.percent || 0)));
+              bar.style.width = pct + "%";
+              statusLine.textContent = s.msg ? `${s.msg} (${pct}%)` : `Processing… (${pct}%)`;
+
+              if (s.status === "done"){
+                clearInterval(pollTimer);
+                resultBox.innerHTML = `<span class="pill ok">Done</span> <a class="link" href="${s.download}" download>Download ${escapeHtml(s.filename || "file")}</a>`;
+                statusLine.textContent = "Done.";
+              } else if (s.status === "error"){
+                clearInterval(pollTimer);
+                resultBox.innerHTML = `<span class="pill err">Error</span> ${escapeHtml(s.error || "Conversion failed.")}`;
+                statusLine.textContent = "";
+              }
+            }catch(err){
+              // transient fetch errors are ignored; next tick will retry
+            }
+          };
+          poll();
+          pollTimer = setInterval(poll, 1000);
         } else {
-          // Show server errors clearly (413/415/etc)
           let msg = xhr.responseText || `HTTP ${xhr.status}`;
-          try {
-            const data = JSON.parse(xhr.responseText);
-            msg = data.detail || msg;
-          } catch {}
+          try { msg = JSON.parse(xhr.responseText).detail || msg; } catch {}
           resultBox.innerHTML = `<span class="pill err">Error</span> ${escapeHtml(msg)}`;
           statusLine.textContent = "";
+          barInd.classList.remove("indeterminate");
+          barInd.style.display = "none";
         }
       }
     };
