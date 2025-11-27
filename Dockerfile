@@ -6,17 +6,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # System deps you need (LibreOffice + ffmpeg + fonts)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libreoffice-writer libreoffice-calc libreoffice-impress \
+    libreoffice-writer \
+    libreoffice-calc \
+    libreoffice-impress \
     default-jre-headless \
-    fonts-dejavu fonts-liberation \
+    fonts-dejavu \
+    fonts-liberation \
     ffmpeg \
     tesseract-ocr \
     tesseract-ocr-eng \
-    tesseract-ocr-all \
     poppler-utils \
-    apt-get install -y tesseract-ocr \
  && rm -rf /var/lib/apt/lists/*
-
 
 
 WORKDIR /app
