@@ -196,38 +196,103 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
 
 def _image_to_searchable_pdf(
     src_path: Path,
-    dpi: int = 150,
+    dpi: int = 300,
     progress=None,
     lang: str = "eng"
 ) -> Path:
     """
-    Create a searchable (selectable-text) PDF from an image
-    while KEEPING the original image colors.
-
-    - The PDF will look exactly like the input image.
-    - Tesseract adds a hidden text layer for selection/search.
+    High-quality searchable PDF:
+    - run OCR on a preprocessed grayscale copy (better text detection)
+    - draw ORIGINAL color image as the visual layer
+    - overlay (almost) invisible text boxes so all text is selectable/searchable
     """
-    _report(progress, 10, "Running OCR…")
+    from PIL import Image, ImageOps
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.utils import ImageReader
+    from pytesseract import Output
 
-    # Use the ORIGINAL image file so colors are preserved.
-    # Tesseract handles the internal preprocessing itself.
+    _report(progress, 5, "Preparing image for OCR…")
+
+    # Load original color image (for final PDF)
+    orig = Image.open(src_path).convert("RGB")
+    ow, oh = orig.size
+
+    # Build OCR image (grayscale + contrast + optional upscale)
+    ocr_img = orig.convert("L")
+    ocr_img = ImageOps.autocontrast(ocr_img)
+
+    # Upscale small images to help OCR
+    min_side = min(ow, oh)
+    scale = 1.0
+    target_min = 1200
+    if min_side < target_min:
+        scale = target_min / float(min_side)
+        new_size = (int(ow * scale), int(oh * scale))
+        ocr_img = ocr_img.resize(new_size, Image.LANCZOS)
+    w, h = ocr_img.size
+
+    _report(progress, 25, "Running OCR (Tesseract)…")
+
     config = "--oem 3 --psm 6"
-
-    pdf_bytes = pytesseract.image_to_pdf_or_hocr(
-        str(src_path),       # <-- pass the path, not the preprocessed img
-        extension="pdf",
+    data = pytesseract.image_to_data(
+        ocr_img,
         lang=lang,
         config=config,
+        output_type=Output.DICT,
     )
 
+    # Compute PDF page size matching the original image (at 'dpi')
+    # PDF points: 72 points per inch
+    width_pt = ow * 72.0 / dpi
+    height_pt = oh * 72.0 / dpi
+
     out = _rand_name("pdf")
-    with open(out, "wb") as f:
-        f.write(pdf_bytes)
+    c = canvas.Canvas(str(out), pagesize=(width_pt, height_pt))
+
+    # Draw original COLOR image as the background
+    _report(progress, 60, "Placing image…")
+    img_reader = ImageReader(orig)
+    c.drawImage(img_reader, 0, 0, width=width_pt, height=height_pt)
+
+    _report(progress, 80, "Overlaying text layer…")
+
+    n = len(data["text"])
+    # White text, usually invisible on most backgrounds, but still selectable.
+    c.setFillColorRGB(1, 1, 1)
+    c.setFont("Helvetica", 8)
+
+    for i in range(n):
+        text = (data["text"][i] or "").strip()
+        if not text:
+            continue
+        try:
+            x = data["left"][i]
+            y = data["top"][i]
+            bw = data["width"][i]
+            bh = data["height"][i]
+        except Exception:
+            continue
+
+        # Map OCR coordinates (in ocr_img space) back to original image space
+        # then to PDF points.
+        x_orig = x / scale
+        y_orig = y / scale
+        bw_orig = bw / scale
+        bh_orig = bh / scale
+
+        x_pt = x_orig * 72.0 / dpi
+        # PDF coordinate system origin is bottom-left
+        # OCR y=0 is top, so we flip:
+        y_pt = height_pt - ((y_orig + bh_orig * 0.8) * 72.0 / dpi)
+
+        # Draw text slightly below top of the box
+        c.drawString(x_pt, y_pt, text)
+
+    c.showPage()
+    c.save()
 
     _report(progress, 100, "Done")
     return out
-
-
 
 
 def convert_image(src_path: Path, target: str, progress=None, dpi: int = 120) -> Path:
