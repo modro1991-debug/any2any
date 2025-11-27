@@ -194,42 +194,31 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
     _report(progress, 100.0, "Done")
     return out_zip
 
-def _image_to_searchable_pdf(src_path: Path, dpi: int = 150, progress=None, lang: str = "eng") -> Path:
+def _image_to_searchable_pdf(
+    src_path: Path,
+    dpi: int = 150,
+    progress=None,
+    lang: str = "eng"
+) -> Path:
     """
-    Use Tesseract (via pytesseract) to create a searchable PDF:
-    - preprocess image for better OCR
-    - adds a text layer so you can select/copy/search
+    Create a searchable (selectable-text) PDF from an image
+    while KEEPING the original image colors.
+
+    - The PDF will look exactly like the input image.
+    - Tesseract adds a hidden text layer for selection/search.
     """
-    _report(progress, 5, "Loading image for OCR…")
+    _report(progress, 10, "Running OCR…")
 
-    from PIL import Image, ImageFilter, ImageOps
-    img = Image.open(src_path)
-
-    # 1) Convert to grayscale (often better for OCR)
-    img = img.convert("L")
-
-    w, h = img.size
-    min_side = min(w, h)
-    if min_side < 900:
-        scale = 900 / min_side
-        new_size = (int(w * scale), int(h * scale))
-        img = img.resize(new_size, Image.LANCZOS)
-
-    # 3) Optional light contrast/stretch
-    img = ImageOps.autocontrast(img)
-
-    _report(progress, 25, "Running OCR (Tesseract)…")
-
+    # Use the ORIGINAL image file so colors are preserved.
+    # Tesseract handles the internal preprocessing itself.
     config = "--oem 3 --psm 6"
 
     pdf_bytes = pytesseract.image_to_pdf_or_hocr(
-        img,
+        str(src_path),       # <-- pass the path, not the preprocessed img
         extension="pdf",
         lang=lang,
         config=config,
     )
-
-    _report(progress, 80, "Building searchable PDF…")
 
     out = _rand_name("pdf")
     with open(out, "wb") as f:
@@ -237,6 +226,7 @@ def _image_to_searchable_pdf(src_path: Path, dpi: int = 150, progress=None, lang
 
     _report(progress, 100, "Done")
     return out
+
 
 
 
