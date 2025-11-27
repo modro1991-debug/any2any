@@ -192,35 +192,56 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
     _report(progress, 100.0, "Done")
     return out_zip
 
-def convert_image(src_path: Path, target: str, progress=None) -> Path:
+def convert_image(src_path: Path, target: str, progress=None, dpi: int = 120) -> Path:
     target = target.lower()
     src_ext = src_path.suffix.lower().lstrip(".")
 
+    # PDF source -> images ZIP (already implemented)
     if src_ext == "pdf":
-        return _pdf_to_images_zip(src_path, target, progress=progress)
+        # if you only want PDF->images (not PDF->PDF), keep this:
+        return _pdf_to_images_zip(src_path, target, dpi=dpi, progress=progress)
 
-    if target not in {"jpg","jpeg","png","webp","ico"}:
+    # ✅ allow pdf as target now
+    if target not in {"jpg", "jpeg", "png", "webp", "ico", "pdf"}:
         raise RuntimeError(f"Unsupported image target: {target}")
 
     _report(progress, 5, "Opening image")
     with Image.open(src_path) as im:
-        if target in {"jpg","jpeg"} and im.mode in ("RGBA","P"):
+        # normalize mode
+        if target in {"jpg", "jpeg"} and im.mode in ("RGBA", "P"):
             im = im.convert("RGB")
         elif im.mode == "P":
             im = im.convert("RGBA")
 
+        # special case: image -> PDF
+        if target == "pdf":
+            # Pillow wants RGB (no transparency) for best results
+            if im.mode in ("RGBA", "P"):
+                im = im.convert("RGB")
+            out = _rand_name("pdf")
+            _report(progress, 50, "Encoding PDF")
+
+            # optional: set DPI metadata
+            im.save(out, format="PDF", resolution=dpi)
+            _report(progress, 100, "Done")
+            return out
+
+        # normal image → image path
         out_ext = "jpg" if target == "jpeg" else target
         out = _rand_name(out_ext)
 
         save_kwargs = {}
-        if out_ext == "jpg":  save_kwargs.update(dict(quality=92, optimize=True, progressive=True))
-        if out_ext == "webp": save_kwargs.update(dict(quality=90, method=4))
+        if out_ext == "jpg":
+            save_kwargs.update(dict(quality=92, optimize=True, progressive=True))
+        if out_ext == "webp":
+            save_kwargs.update(dict(quality=90, method=4))
+
         _report(progress, 50, "Encoding")
         if out_ext == "ico":
             icon = ImageOps.contain(im, (256, 256))
             icon.save(out, format="ICO")
         else:
-            fmt = {"jpg":"JPEG","png":"PNG","webp":"WEBP"}[out_ext]
+            fmt = {"jpg": "JPEG", "png": "PNG", "webp": "WEBP"}[out_ext]
             im.save(out, format=fmt, **save_kwargs)
 
     _report(progress, 100, "Done")
