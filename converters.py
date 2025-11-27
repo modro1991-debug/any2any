@@ -194,16 +194,42 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
     _report(progress, 100.0, "Done")
     return out_zip
 
-def _image_to_searchable_pdf(src_path: Path, dpi: int = 150, progress=None) -> Path:
+def _image_to_searchable_pdf(src_path: Path, dpi: int = 150, progress=None, lang: str = "eng") -> Path:
     """
     Use Tesseract (via pytesseract) to create a searchable PDF:
-    - preserves the original look (image)
-    - adds a real text layer so you can select/copy/search text
+    - preprocess image for better OCR
+    - adds a text layer so you can select/copy/search
     """
-    _report(progress, 10, "Running OCR…")
+    _report(progress, 5, "Loading image for OCR…")
 
-    # Tesseract will read the image file directly and return a PDF.
-    pdf_bytes = pytesseract.image_to_pdf_or_hocr(str(src_path), extension="pdf")
+    from PIL import Image, ImageFilter, ImageOps
+    img = Image.open(src_path)
+
+    # 1) Convert to grayscale (often better for OCR)
+    img = img.convert("L")
+
+    w, h = img.size
+    min_side = min(w, h)
+    if min_side < 900:
+        scale = 900 / min_side
+        new_size = (int(w * scale), int(h * scale))
+        img = img.resize(new_size, Image.LANCZOS)
+
+    # 3) Optional light contrast/stretch
+    img = ImageOps.autocontrast(img)
+
+    _report(progress, 25, "Running OCR (Tesseract)…")
+
+    config = "--oem 3 --psm 6"
+
+    pdf_bytes = pytesseract.image_to_pdf_or_hocr(
+        img,
+        extension="pdf",
+        lang=lang,
+        config=config,
+    )
+
+    _report(progress, 80, "Building searchable PDF…")
 
     out = _rand_name("pdf")
     with open(out, "wb") as f:
@@ -211,6 +237,7 @@ def _image_to_searchable_pdf(src_path: Path, dpi: int = 150, progress=None) -> P
 
     _report(progress, 100, "Done")
     return out
+
 
 
 def convert_image(src_path: Path, target: str, progress=None, dpi: int = 120) -> Path:
