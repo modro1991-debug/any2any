@@ -194,19 +194,44 @@ def _pdf_to_images_zip(src_path: Path, target: str, dpi: int = 200, progress=Non
     _report(progress, 100.0, "Done")
     return out_zip
 
+def _image_to_searchable_pdf(src_path: Path, dpi: int = 150, progress=None) -> Path:
+    """
+    Use Tesseract (via pytesseract) to create a searchable PDF:
+    - preserves the original look (image)
+    - adds a real text layer so you can select/copy/search text
+    """
+    _report(progress, 10, "Running OCR…")
+
+    # Tesseract will read the image file directly and return a PDF.
+    pdf_bytes = pytesseract.image_to_pdf_or_hocr(str(src_path), extension="pdf")
+
+    out = _rand_name("pdf")
+    with open(out, "wb") as f:
+        f.write(pdf_bytes)
+
+    _report(progress, 100, "Done")
+    return out
+
+
 def convert_image(src_path: Path, target: str, progress=None, dpi: int = 120) -> Path:
     target = target.lower()
     src_ext = src_path.suffix.lower().lstrip(".")
 
     # PDF source -> images ZIP (already implemented)
     if src_ext == "pdf":
-        # if you only want PDF->images (not PDF->PDF), keep this:
+        # PDF -> images (jpg/png/webp) as zip
         return _pdf_to_images_zip(src_path, target, dpi=dpi, progress=progress)
 
-    # ✅ allow pdf as target now
+    # allow pdf as target now (and other image formats)
     if target not in {"jpg", "jpeg", "png", "webp", "ico", "pdf"}:
         raise RuntimeError(f"Unsupported image target: {target}")
 
+    # special case: image -> PDF with OCR (editable/searchable)
+    if target == "pdf":
+        # We don't need to open it with Pillow here, Tesseract reads the file itself.
+        return _image_to_searchable_pdf(src_path, dpi=dpi, progress=progress)
+
+    # -------- normal image -> image path ----------
     _report(progress, 5, "Opening image")
     with Image.open(src_path) as im:
         # normalize mode
@@ -215,20 +240,6 @@ def convert_image(src_path: Path, target: str, progress=None, dpi: int = 120) ->
         elif im.mode == "P":
             im = im.convert("RGBA")
 
-        # special case: image -> PDF
-        if target == "pdf":
-            # Pillow wants RGB (no transparency) for best results
-            if im.mode in ("RGBA", "P"):
-                im = im.convert("RGB")
-            out = _rand_name("pdf")
-            _report(progress, 50, "Encoding PDF")
-
-            # optional: set DPI metadata
-            im.save(out, format="PDF", resolution=dpi)
-            _report(progress, 100, "Done")
-            return out
-
-        # normal image → image path
         out_ext = "jpg" if target == "jpeg" else target
         out = _rand_name(out_ext)
 
@@ -249,32 +260,40 @@ def convert_image(src_path: Path, target: str, progress=None, dpi: int = 120) ->
     _report(progress, 100, "Done")
     return out
 
+
 # OCR image → editable PDF via pytesseract
+
 def convert_image_to_editable_pdf(src_path: Path, progress=None) -> Path:
     _report(progress, 5, "Running OCR…")
 
-    # Load image
-    with Image.open(src_path) as im:
-        # Convert to black/white for better OCR if needed
-        im_gray = im.convert("L")
+    # OCR to searchable PDF
+    pdf_bytes = pytesseract.image_to_pdf_or_hocr(str(src_path), extension='pdf')
 
-    # Extract text
-    text = pytesseract.image_to_string(im_gray)
-
-    _report(progress, 50, "Building editable PDF")
-
-    # Build a simple PDF with extracted text
     out = _rand_name("pdf")
-    from reportlab.pdfgen import canvas
-
-    c = canvas.Canvas(str(out))
-    for line in text.split("\n"):
-        c.drawString(40, 800, line)
-        c.translate(0, -15)
-    c.save()
+    with open(out, "wb") as f:
+        f.write(pdf_bytes)
 
     _report(progress, 100, "Done")
     return out
+
+def convert_image_to_docx(src_path: Path, progress=None) -> Path:
+    _report(progress, 5, "Reading image…")
+    img = Image.open(src_path)
+
+    _report(progress, 20, "Extracting text…")
+    text = pytesseract.image_to_string(img)
+
+    # Build DOCX
+    from docx import Document
+    doc = Document()
+    for line in text.split("\n"):
+        doc.add_paragraph(line)
+
+    out = _rand_name("docx")
+    doc.save(out)
+    _report(progress, 100, "Done")
+    return out
+
 
 # ===================== AUDIO / VIDEO ========================
 def convert_av(src_path: Path, target: str, progress=None) -> Path:
