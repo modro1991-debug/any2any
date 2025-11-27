@@ -10,7 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     default-jre-headless \
     fonts-dejavu fonts-liberation \
     ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-all \
     poppler-utils \
+    apt-get install -y tesseract-ocr \
  && rm -rf /var/lib/apt/lists/*
 
 

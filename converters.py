@@ -3,6 +3,8 @@
 import os, csv, json, shutil, tempfile, subprocess, secrets, zipfile
 from pathlib import Path
 from uuid import uuid4
+import pytesseract
+from PIL import Image, ImageOps
 
 # Shared temp dir
 TMP_DIR = Path(os.getenv("TMP_DIR", "/tmp/any2any"))
@@ -112,7 +114,7 @@ def convert_doc(src_path: Path, target: str, progress=None) -> Path:
     return final
 
 # ======================== IMAGES ============================
-from PIL import Image, ImageOps
+
 
 def _pdf_page_count(src_path: Path) -> int:
     try:
@@ -243,6 +245,33 @@ def convert_image(src_path: Path, target: str, progress=None, dpi: int = 120) ->
         else:
             fmt = {"jpg": "JPEG", "png": "PNG", "webp": "WEBP"}[out_ext]
             im.save(out, format=fmt, **save_kwargs)
+
+    _report(progress, 100, "Done")
+    return out
+
+# OCR image → editable PDF via pytesseract
+def convert_image_to_editable_pdf(src_path: Path, progress=None) -> Path:
+    _report(progress, 5, "Running OCR…")
+
+    # Load image
+    with Image.open(src_path) as im:
+        # Convert to black/white for better OCR if needed
+        im_gray = im.convert("L")
+
+    # Extract text
+    text = pytesseract.image_to_string(im_gray)
+
+    _report(progress, 50, "Building editable PDF")
+
+    # Build a simple PDF with extracted text
+    out = _rand_name("pdf")
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(out))
+    for line in text.split("\n"):
+        c.drawString(40, 800, line)
+        c.translate(0, -15)
+    c.save()
 
     _report(progress, 100, "Done")
     return out
