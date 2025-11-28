@@ -785,6 +785,307 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
 <!-- App JS -->
-<script src="/static/js/app.js"></script>
+ <script>
+(function () {
+  function $(q) { return document.querySelector(q); }
+
+  var drop        = $("#drop");
+  var fileInput   = $("#file");
+  var filemeta    = $("#filemeta");
+  var chipsWrap   = $("#chips");
+  var targetSelect= $("#targetSelect");
+  var convertBtn  = $("#convertBtn");
+  var bar         = $("#bar");
+  var barInd      = $("#barInd");
+  var statusLine  = $("#status");
+  var resultBox   = $("#result");
+
+  if (!drop || !fileInput || !convertBtn || !targetSelect) {
+    console.error("Any2Any: core elements missing");
+    return;
+  }
+
+  var IMAGE_IN = ["jpg","jpeg","png","webp","tiff","bmp"];
+  var DOC_IN   = ["pdf"];
+
+  function extOf(name){
+    var m = /\.[^.]+$/.exec(name || "");
+    return m ? m[0].slice(1).toLowerCase() : "";
+  }
+
+  function humanSize(n){
+    if (!n && n !== 0) return "";
+    var u = ["B","KB","MB","GB"];
+    var i = 0;
+    while (n >= 1024 && i < u.length-1){ n /= 1024; i++; }
+    return n.toFixed(n < 10 && i ? 1 : 0) + " " + u[i];
+  }
+
+  function guessCategory(ext){
+    if (DOC_IN.indexOf(ext) !== -1) return "doc";
+    if (IMAGE_IN.indexOf(ext) !== -1) return "image";
+    return "doc";
+  }
+
+  function suggestedTargets(ext){
+    if (IMAGE_IN.indexOf(ext) !== -1) return ["pdf","docx"];
+    if (ext === "pdf") return ["jpg","png","webp","docx"];
+    return [];
+  }
+
+  function allTargetsFor(ext){
+    if (IMAGE_IN.indexOf(ext) !== -1) return ["pdf","docx"];
+    if (ext === "pdf") return ["jpg","png","webp","docx"];
+    return [];
+  }
+
+  function enableConvertIfReady(){
+    var hasFile   = !!(fileInput.files && fileInput.files.length);
+    var hasTarget = !!targetSelect.value;
+    convertBtn.disabled = !(hasFile && hasTarget);
+  }
+
+  function setSuggestions(ext){
+    chipsWrap.innerHTML = "";
+    var opts = allTargetsFor(ext);
+    targetSelect.innerHTML = opts.map(function(o){
+      return '<option value="'+o+'">'+o.toUpperCase()+'</option>';
+    }).join("");
+
+    var top = suggestedTargets(ext).filter(function(x){
+      return opts.indexOf(x) !== -1;
+    });
+
+    top.forEach(function(fmt){
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = fmt.toUpperCase();
+      chip.addEventListener("click", function(){
+        var existing = chipsWrap.querySelectorAll(".chip");
+        for (var i=0; i<existing.length; i++){
+          existing[i].classList.remove("active");
+        }
+        chip.classList.add("active");
+        targetSelect.value = fmt;
+        enableConvertIfReady();
+      });
+      chipsWrap.appendChild(chip);
+    });
+
+    if (targetSelect.options.length > 0) targetSelect.selectedIndex = 0;
+    var firstChip = chipsWrap.querySelector(".chip");
+    if (firstChip) firstChip.click();
+
+    enableConvertIfReady();
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"]/g, function(c){
+      return {
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;"
+      }[c];
+    });
+  }
+
+  function onFilePicked(file){
+    resultBox.innerHTML = "";
+    statusLine.textContent = "";
+    bar.style.width = "0%";
+    barInd.style.display = "none";
+    barInd.classList.remove("indeterminate");
+
+    var ext = extOf(file.name);
+    var cat = guessCategory(ext);
+    console.log("Picked file:", file.name, "ext:", ext, "cat:", cat);
+
+    setSuggestions(ext);
+
+    filemeta.textContent = file.name + " — " + ext.toUpperCase() + " • " + humanSize(file.size);
+    enableConvertIfReady();
+  }
+
+  targetSelect.addEventListener("change", enableConvertIfReady);
+
+  ["dragenter","dragover"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){
+      e.preventDefault();
+      drop.classList.add("drag");
+    });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){
+      e.preventDefault();
+      drop.classList.remove("drag");
+    });
+  });
+  drop.addEventListener("drop", function(e){
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f){
+      fileInput.files = e.dataTransfer.files;
+      onFilePicked(f);
+    }
+  });
+
+  var chooseBtn = document.querySelector(".cta");
+  if (chooseBtn) {
+    chooseBtn.addEventListener("click", function () {
+      fileInput.click();
+    });
+  }
+
+  fileInput.addEventListener("change", function(){
+    var f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    onFilePicked(f);
+  });
+
+  convertBtn.addEventListener("click", function(){
+    if (convertBtn.disabled) {
+      console.log("Convert clicked but disabled");
+      return;
+    }
+    var file   = fileInput.files && fileInput.files[0];
+    var target = targetSelect.value;
+    if (!file || !target) {
+      console.log("No file or target");
+      return;
+    }
+
+    resultBox.innerHTML = "";
+    statusLine.textContent = "";
+    bar.style.width = "0%";
+    barInd.style.display = "none";
+    barInd.classList.remove("indeterminate");
+
+    var srcExt = extOf(file.name);
+    var cat    = guessCategory(srcExt);
+    console.log("Starting convert:", { srcExt: srcExt, target: target, cat: cat });
+
+    statusLine.textContent = "Uploading…";
+    var fd = new FormData();
+    fd.append("file", file);
+    fd.append("target", target);
+    fd.append("category", cat);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/convert");
+
+    xhr.onerror = function(){
+      barInd.classList.remove("indeterminate");
+      barInd.style.display = "none";
+      resultBox.innerHTML = '<span class="pill err">Error</span> Network error while uploading.';
+      statusLine.textContent = "";
+    };
+    xhr.onabort = function(){
+      barInd.classList.remove("indeterminate");
+      barInd.style.display = "none";
+      resultBox.innerHTML = '<span class="pill err">Cancelled</span> Upload was aborted.';
+      statusLine.textContent = "";
+    };
+
+    xhr.upload.onprogress = function(ev){
+      if (ev.lengthComputable) {
+        var pct = Math.round((ev.loaded / ev.total) * 100);
+        bar.style.width = pct + "%";
+      }
+    };
+    xhr.upload.onload = function(){
+      bar.style.width = "100%";
+      statusLine.textContent = "Processing…";
+      barInd.style.display = "block";
+      barInd.classList.add("indeterminate");
+    };
+
+    xhr.onreadystatechange = function(){
+      if (xhr.readyState === XMLHttpRequest.DONE) {
+        barInd.classList.remove("indeterminate");
+        barInd.style.display = "none";
+
+        if (xhr.status === 200) {
+          try {
+            var data = JSON.parse(xhr.responseText);
+            var t = data.process_time ? ' <span class="muted">(⏱ ' + data.process_time + 's)</span>' : "";
+            statusLine.textContent = "Done.";
+            resultBox.innerHTML =
+              '<span class="pill ok">Done</span> ' +
+              '<a class="link" href="' + data.download + '" download>' +
+              'Download ' + escapeHtml(data.filename) + '</a>' + t;
+          } catch (e) {
+            console.error("Failed to parse JSON response", e, xhr.responseText);
+            statusLine.textContent = "Done.";
+            resultBox.textContent = "Download ready.";
+          }
+        } else {
+          var msg = xhr.responseText || ("HTTP " + xhr.status);
+          try {
+            var obj = JSON.parse(xhr.responseText);
+            if (obj && obj.detail) msg = obj.detail;
+          } catch (e2) {}
+          console.error("Server error:", xhr.status, msg);
+          resultBox.innerHTML = '<span class="pill err">Error</span> ' + escapeHtml(msg);
+          statusLine.textContent = "";
+        }
+      }
+    };
+
+    xhr.send(fd);
+  });
+
+  // Cookie banner (minimal)
+  var cb   = document.getElementById("cookieBanner");
+  var btnA = document.getElementById("cookieAccept");
+  var btnD = document.getElementById("cookieDecline");
+
+  function setCookie(name, value, days){
+    var maxAge = days*24*60*60;
+    document.cookie = name + "=" + encodeURIComponent(value) +
+      "; Max-Age=" + maxAge + "; Path=/; SameSite=Lax";
+  }
+  function getCookie(name){
+    var parts = document.cookie.split(";");
+    for (var i=0;i<parts.length;i++){
+      var s = parts[i].trim();
+      if (s.indexOf(name + "=") === 0){
+        return s.split("=")[1];
+      }
+    }
+    return null;
+  }
+  function showBannerIfNeeded(){
+    if (!getCookie("consent") && cb){
+      cb.classList.add("show");
+      cb.setAttribute("aria-hidden","false");
+    }
+  }
+  if (btnA) {
+    btnA.addEventListener("click", function(){
+      setCookie("consent","accept",180);
+      if (cb){
+        cb.classList.remove("show");
+        cb.setAttribute("aria-hidden","true");
+      }
+    });
+  }
+  if (btnD) {
+    btnD.addEventListener("click", function(){
+      if (cb){
+        cb.classList.remove("show");
+        cb.setAttribute("aria-hidden","true");
+      }
+    });
+  }
+  window.addEventListener("keydown", function(e){
+    if (e.key === "Escape" && cb && cb.classList.contains("show") && btnD){
+      btnD.click();
+    }
+  });
+  showBannerIfNeeded();
+})();
+</script>
+
 </body>
 </html>
