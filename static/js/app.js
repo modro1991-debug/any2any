@@ -17,18 +17,6 @@
   const IMAGE_IN = ["jpg", "jpeg", "png", "webp", "tiff", "bmp"];
   const DOC_IN   = ["pdf"];
 
-  // Local conversion availability (browser-side) – only simple cases
-  const LOCAL_OK = {
-    "pdf": new Set(["jpg", "png", "webp"]), // all pages -> zip (server does this; local only for pdf->images via pdf.js if you want)
-    "jpg": new Set(["png", "webp"]),
-    "jpeg": new Set(["png", "webp"]),
-    "png": new Set(["jpg", "webp"]),
-    "webp": new Set(["jpg", "png"]),
-    "bmp": new Set(["jpg", "png", "webp"]),
-    "tiff": new Set(["jpg", "png", "webp"]),
-  };
-
-  // Helpers
   function extOf(name) {
     const m = /\.[^.]+$/.exec(name || "");
     return m ? m[0].slice(1).toLowerCase() : "";
@@ -111,10 +99,6 @@
     enableConvertIfReady();
   }
 
-  function canDoLocal(srcExt, targetExt) {
-    return LOCAL_OK[srcExt]?.has(targetExt) || false;
-  }
-
   function escapeHtml(s) {
     return String(s).replace(/[&<>"]/g, (c) => ({
       "&": "&amp;",
@@ -122,44 +106,6 @@
       ">": "&gt;",
       '"': "&quot;",
     }[c]));
-  }
-
-  // ---------- Local conversion (basic image->image) ----------
-  async function convertLocal(file, srcExt, targetExt) {
-    // Only do simple image->image in browser.
-    if (
-      ["jpg", "jpeg", "png", "webp", "bmp", "tiff"].includes(srcExt) &&
-      ["jpg", "png", "webp"].includes(targetExt)
-    ) {
-      statusLine.textContent = "Decoding image…";
-      const bmp = await createImageBitmap(file);
-      bar.style.width = "30%";
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      canvas.width = bmp.width;
-      canvas.height = bmp.height;
-      ctx.drawImage(bmp, 0, 0);
-      bar.style.width = "60%";
-      const mime = {
-        jpg: "image/jpeg",
-        png: "image/png",
-        webp: "image/webp",
-      }[targetExt];
-      const blob = await new Promise((res) =>
-        canvas.toBlob(
-          res,
-          mime,
-          mime === "image/jpeg" ? 0.92 : 0.95
-        )
-      );
-      const url = URL.createObjectURL(blob);
-      const base = file.name.replace(/\.[^.]+$/, "");
-      bar.style.width = "100%";
-      statusLine.textContent = "Done.";
-      return { url, filename: `${base}.${targetExt}` };
-    }
-
-    throw new Error("Local conversion not supported for this format.");
   }
 
   // ---------- UI events ----------
@@ -211,7 +157,7 @@
   }
 
   // ---------- Convert click ----------
-  convertBtn.addEventListener("click", async () => {
+  convertBtn.addEventListener("click", () => {
     if (convertBtn.disabled) return;
     const file = fileInput.files?.[0];
     const target = targetSelect.value;
@@ -225,7 +171,7 @@
 
     const srcExt = extOf(file.name);
 
-    // Server conversion path
+    // Server conversion path only
     statusLine.textContent = "Uploading…";
     const fd = new FormData();
     fd.append("file", file);
