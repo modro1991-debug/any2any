@@ -1,137 +1,812 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Any2Any — Free Online File Converter</title>
-<meta name="description" content="Convert images, videos, audio, documents, subtitles, contacts and data online. Fast, private, and free. Files are processed temporarily and auto-deleted.">
-<style>
-  :root{ --bg:#0b1020;--panel:#0f1630;--card:#121a3a;--muted:#9ab0d6;--line:#1f2a4a;--cta:#2a66ff;--ok:#1f8a4d;--err:#a23a3a; }
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:#e7ecf5;font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;}
-  .wrap{max-width:960px;margin:auto;padding:24px}
-  .hero{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px}
-  h1{margin:0 0 6px 0;font-size:28px} .muted{color:var(--muted);font-size:14px}
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Any2Any — Smart Image & PDF Converter</title>
+  <meta name="description" content="Convert images and PDFs into searchable or editable documents. Image ⇨ PDF, Image ⇨ DOCX, PDF ⇨ images, PDF ⇨ DOCX. Fast, private, and free.">
 
-  .grid{display:grid;gap:16px;grid-template-columns:1fr;margin-top:18px}
-  @media(min-width:900px){.grid{grid-template-columns:1.2fr .8fr}}
-  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+  <style>
+    :root{
+      --bg:#050814;
+      --bg-alt:#060a18;
+      --glass:#0d1327;
+      --glass-soft:#111938;
+      --accent:#4f7dff;
+      --accent-soft:rgba(79,125,255,.2);
+      --accent-strong:#88a7ff;
+      --danger:#f25f5c;
+      --ok:#1f8a4d;
+      --line:#222b4a;
+      --text:#e7ecf7;
+      --muted:#9aa7cc;
+      --chip:#0a0f23;
+      --shadow-strong:0 24px 80px rgba(0,0,0,.8);
+      --radius-lg:20px;
+      --radius-xl:26px;
+      --radius-pill:999px;
+    }
 
-  .drop{border:2px dashed var(--line);background:var(--card);border-radius:16px;padding:22px;display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center;transition:.2s}
-  .drop.drag{border-color:var(--cta);box-shadow:0 0 0 3px rgba(42,102,255,.25) inset}
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+      color:var(--text);
+      background:radial-gradient(circle at top, #1e2752 0, #050814 45%, #02030a 100%);
+      -webkit-font-smoothing:antialiased;
+    }
 
-  /* Overlay input captures click anywhere on the button */
-  .file-chooser{ position:relative; display:inline-block; }
-  .file-chooser input[type="file"]{
-    position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
-  }
+    .page{
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+    }
 
-  .cta{display:inline-flex;align-items:center;gap:8px;background:var(--cta);border:none;padding:10px 14px;border-radius:12px;color:white;font-weight:600;cursor:pointer}
-  .filemeta{margin-top:10px;font-size:14px;color:#9ab0d6}
-  .section-title{margin:0 0 8px 0;font-size:14px;color:#9ab0d6;letter-spacing:.3px;text-transform:uppercase}
-  .chips{display:flex;flex-wrap:wrap;gap:8px}
-  .chip{border:1px solid var(--line);background:#0b1020;padding:8px 12px;border-radius:999px;cursor:pointer;font-size:14px}
-  .chip.active,.chip:hover{border-color:var(--cta);box-shadow:0 0 0 2px rgba(42,102,255,.25)}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
-  select,button{background:#0b1020;color:#e7ecf5;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
-  button.convert{background:var(--cta);border:none;font-weight:600}
-  button.convert[disabled]{opacity:.6;cursor:not-allowed}
+    .wrap{
+      width:100%;
+      max-width:1120px;
+      margin:0 auto;
+      padding:20px 18px 28px;
+    }
 
-  .progress{height:8px;background:#1a2448;border-radius:6px;overflow:hidden;margin-top:12px;position:relative}
-  .bar{height:8px;background:var(--cta);width:0%}
-  .bar.indeterminate{
-    position:absolute;left:0;top:0;width:100%;height:8px;
-    background:linear-gradient(90deg, rgba(42,102,255,0) 0%, rgba(42,102,255,.6) 50%, rgba(42,102,255,0) 100%);
-    background-size:200% 100%;animation:slide 1.2s linear infinite
-  }
-  @keyframes slide{0%{background-position:200% 0}100%{background-position:-200% 0}}
-  .statusline{margin-top:6px;font-size:13px;color:#9ab0d6}
-  .result{margin-top:12px;font-size:14px}
-  .pill{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:#0b1020}
-  .pill.ok{background:#0f2f1a;border-color:#1d623a} .pill.err{background:#2f1010;border-color:#6a2a2a}
-  a.link{color:#7fb2ff;text-decoration:none}
+    header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+      margin-bottom:20px;
+    }
 
-  .footer{margin-top:18px;font-size:12px;color:#9ab0d6;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  .footer a{color:#7fb2ff;text-decoration:none}
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .brand-logo{
+      width:34px;
+      height:34px;
+      border-radius:14px;
+      background:conic-gradient(from 180deg at 50% 50%, #4f7dff, #6b96ff, #e06fff, #4f7dff);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 0 32px rgba(79,125,255,.55);
+    }
+    .brand-logo span{
+      font-size:19px;
+      font-weight:700;
+      color:#f7f8ff;
+      text-shadow:0 0 12px rgba(0,0,0,.8);
+    }
+    .brand-text{
+      display:flex;
+      flex-direction:column;
+      gap:1px;
+    }
+    .brand-text-title{
+      font-weight:600;
+      letter-spacing:.04em;
+      font-size:17px;
+      text-transform:uppercase;
+    }
+    .brand-text-sub{
+      font-size:12px;
+      color:var(--muted);
+    }
 
-  /* Cookie banner */
-  .cookie-banner{ position:fixed;left:12px;right:12px;bottom:12px;z-index:50;background:#121a3a;border:1px solid #1f2a4a;color:#e7ecf5;border-radius:14px;padding:12px 14px;display:none;box-shadow:0 8px 24px rgba(0,0,0,.35) }
-  .cookie-banner.show{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .cookie-banner p{margin:0;font-size:14px;color:#9ab0d6}
-  .cookie-actions{margin-left:auto;display:flex;gap:8px}
-  .cookie-btn{border:1px solid #1f2a4a;background:#0b1020;color:#e7ecf5;padding:8px 12px;border-radius:10px;cursor:pointer}
-  .cookie-btn.primary{background:#2a66ff;border:none;font-weight:600}
-</style>
+    .header-pill{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(9,13,32,.85);
+      border:1px solid rgba(129,150,255,.3);
+      box-shadow:0 12px 40px rgba(0,0,0,.5);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+      font-size:12px;
+      color:var(--muted);
+    }
+    .header-pill span.tag{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      padding:4px 7px;
+      border-radius:999px;
+      background:rgba(79,125,255,.12);
+      color:var(--accent-strong);
+      border:1px solid rgba(79,125,255,.35);
+    }
+
+    .hero{
+      background:radial-gradient(circle at 0 0, rgba(104,154,255,.2) 0, transparent 55%),
+                 radial-gradient(circle at 100% 10%, rgba(186,104,255,.18) 0, transparent 55%),
+                 linear-gradient(145deg,#050815,#080f24);
+      border-radius:var(--radius-xl);
+      padding:26px 22px 22px;
+      border:1px solid rgba(97,123,255,.35);
+      box-shadow:var(--shadow-strong);
+      position:relative;
+      overflow:hidden;
+    }
+
+    .hero::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        radial-gradient(circle at 20% -10%,rgba(112,164,255,.14) 0,transparent 55%),
+        radial-gradient(circle at 80% 110%,rgba(226,142,255,.16) 0,transparent 45%);
+      mix-blend-mode:screen;
+      pointer-events:none;
+    }
+
+    .hero-inner{
+      position:relative;
+      z-index:1;
+    }
+
+    .hero-headline{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin-bottom:14px;
+    }
+
+    h1{
+      margin:0;
+      font-size:26px;
+      letter-spacing:.02em;
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    h1 span.sparkle{
+      font-size:19px;
+      filter:drop-shadow(0 0 8px rgba(255,255,255,.7));
+    }
+    .muted{
+      color:var(--muted);
+      font-size:13px;
+      max-width:520px;
+    }
+
+    .hero-badges{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:6px;
+      margin-bottom:4px;
+      font-size:11px;
+      color:var(--muted);
+    }
+    .pill-soft{
+      padding:4px 9px;
+      border-radius:999px;
+      border:1px solid rgba(114,136,234,.4);
+      background:rgba(10,12,31,.9);
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .pill-soft small{
+      opacity:.9;
+    }
+
+    /* Main grid */
+    .grid{
+      display:grid;
+      gap:18px;
+      grid-template-columns:1fr;
+      margin-top:18px;
+    }
+    @media(min-width:900px){
+      .grid{
+        grid-template-columns:1.25fr .85fr;
+      }
+    }
+
+    .panel{
+      background:rgba(4,7,22,.96);
+      border:1px solid rgba(26,36,80,.95);
+      border-radius:var(--radius-lg);
+      padding:16px 14px 14px;
+      position:relative;
+      overflow:hidden;
+    }
+    .panel::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:radial-gradient(circle at top right,rgba(95,139,255,.16) 0,transparent 55%);
+      opacity:.65;
+      mix-blend-mode:soft-light;
+      pointer-events:none;
+    }
+    .panel-inner{ position:relative; z-index:1; }
+
+    .drop{
+      border:1.5px dashed rgba(68,83,155,.9);
+      background:linear-gradient(145deg,#050814,#0a1024);
+      border-radius:18px;
+      padding:22px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:190px;
+      text-align:center;
+      transition:.18s;
+      outline:none;
+      position:relative;
+      overflow:hidden;
+    }
+    .drop::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:radial-gradient(circle at 0 0,rgba(108,167,255,.25) 0,transparent 55%);
+      mix-blend-mode:screen;
+      opacity:.65;
+      pointer-events:none;
+    }
+    .drop.drag{
+      border-color:var(--accent);
+      box-shadow:0 0 0 1px rgba(79,125,255,.65),0 0 36px rgba(79,125,255,.35);
+      transform:translateY(-1px);
+    }
+
+    .drop-title{
+      font-weight:600;
+      margin-bottom:4px;
+      font-size:15px;
+    }
+    .drop-sub{
+      font-size:13px;
+      color:var(--muted);
+    }
+
+    .file-chooser{ position:relative; display:inline-block; margin-top:14px; }
+    .file-chooser input[type="file"]{
+      position:absolute;
+      inset:0;
+      opacity:0;
+      cursor:pointer;
+      width:100%;
+      height:100%;
+    }
+
+    .cta{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background:linear-gradient(135deg,#4f7dff,#8f9dff);
+      border:none;
+      padding:9px 14px;
+      border-radius:13px;
+      color:white;
+      font-weight:600;
+      cursor:pointer;
+      font-size:13px;
+      box-shadow:0 10px 30px rgba(15,30,90,.8);
+      position:relative;
+      overflow:hidden;
+    }
+    .cta::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(120deg,rgba(255,255,255,.12),transparent 40%,transparent 60%,rgba(255,255,255,.25));
+      mix-blend-mode:screen;
+      opacity:.0;
+      transition:opacity .18s;
+    }
+    .cta:hover::after{opacity:1;}
+
+    .cta-icon{
+      width:18px;
+      height:18px;
+      border-radius:999px;
+      background:rgba(0,0,0,.18);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:13px;
+    }
+
+    .filemeta{
+      margin-top:10px;
+      font-size:12px;
+      color:var(--accent-strong);
+      word-break:break-all;
+      opacity:.95;
+    }
+
+    .progress{
+      height:7px;
+      background:#090e24;
+      border-radius:999px;
+      overflow:hidden;
+      margin-top:14px;
+      position:relative;
+      box-shadow:0 0 0 1px rgba(32,44,88,.8) inset;
+    }
+    .bar{
+      height:7px;
+      background:linear-gradient(90deg,#4f7dff,#8f9dff);
+      width:0%;
+      transition:width .12s linear;
+    }
+    .bar.indeterminate{
+      position:absolute;
+      left:0;
+      top:0;
+      width:100%;
+      height:7px;
+      background:linear-gradient(90deg,rgba(79,125,255,0) 0%,rgba(79,125,255,.9) 50%,rgba(79,125,255,0) 100%);
+      background-size:220% 100%;
+      animation:slide 1.05s linear infinite;
+    }
+    @keyframes slide{
+      0%{background-position:200% 0}
+      100%{background-position:-200% 0}
+    }
+
+    .statusline{
+      margin-top:7px;
+      font-size:12px;
+      color:var(--muted);
+      min-height:16px;
+    }
+    .result{
+      margin-top:10px;
+      font-size:13px;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      padding:3px 8px;
+      border-radius:999px;
+      font-size:11px;
+      border:1px solid rgba(67,84,150,.9);
+      background:#070a1a;
+      gap:6px;
+    }
+    .pill.ok{
+      border-color:rgba(63,136,91,.9);
+      background:rgba(14,61,33,.95);
+      color:#bdf8d0;
+    }
+    .pill.err{
+      border-color:rgba(182,70,70,.9);
+      background:rgba(68,20,20,.96);
+      color:#ffd9d7;
+    }
+    a.link{
+      color:var(--accent-strong);
+      text-decoration:none;
+      border-bottom:1px dashed rgba(136,167,255,.65);
+      padding-bottom:1px;
+    }
+    a.link:hover{
+      border-bottom-style:solid;
+    }
+
+    .section-title{
+      margin:0 0 8px 0;
+      font-size:12px;
+      color:var(--muted);
+      letter-spacing:.16em;
+      text-transform:uppercase;
+    }
+
+    .chips{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-bottom:6px;
+    }
+    .chip{
+      border:1px solid rgba(44,56,105,.98);
+      background:var(--chip);
+      padding:7px 12px;
+      border-radius:999px;
+      cursor:pointer;
+      font-size:12px;
+      color:var(--muted);
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      transition:.16s;
+    }
+    .chip::before{
+      content:"●";
+      font-size:7px;
+      color:#4f7dff;
+      opacity:.75;
+    }
+    .chip.active,
+    .chip:hover{
+      border-color:var(--accent);
+      box-shadow:0 0 0 1px rgba(79,125,255,.6),0 0 24px rgba(79,125,255,.3);
+      color:#dde6ff;
+      background:linear-gradient(135deg,#060a1e,#0a1028);
+    }
+
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin-top:8px;
+    }
+
+    select,
+    button{
+      background:#050816;
+      color:var(--text);
+      border:1px solid rgba(40,50,100,.96);
+      border-radius:12px;
+      padding:9px 11px;
+      font-size:13px;
+      outline:none;
+    }
+    select:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 1px rgba(79,125,255,.5);
+    }
+
+    button.convert{
+      background:linear-gradient(135deg,#4f7dff,#8f9dff);
+      border:none;
+      font-weight:600;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding-inline:14px;
+      box-shadow:0 10px 30px rgba(15,30,90,.8);
+    }
+    button.convert span.icon{
+      font-size:15px;
+    }
+    button.convert[disabled]{
+      opacity:.55;
+      cursor:not-allowed;
+      box-shadow:none;
+    }
+
+    .toggle-row{
+      margin-top:8px;
+      gap:8px;
+      color:var(--muted);
+      font-size:12px;
+      display:flex;
+      align-items:flex-start;
+    }
+    .toggle-row input{
+      margin-top:2px;
+      accent-color:var(--accent);
+    }
+
+    .tips{
+      margin-top:11px;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .tips strong{
+      color:#dde4ff;
+      font-weight:600;
+    }
+
+    /* Right panel extra content */
+    .badge-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+      gap:10px;
+      margin-top:10px;
+      font-size:12px;
+    }
+    .mini-card{
+      padding:9px 10px;
+      border-radius:14px;
+      background:rgba(6,10,27,.98);
+      border:1px solid rgba(34,47,97,.95);
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+    .mini-card-label{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--muted);
+    }
+    .mini-card-main{
+      font-size:12px;
+      color:#dde3ff;
+    }
+    .mini-card-main span{
+      opacity:.9;
+    }
+
+    .footer{
+      margin-top:16px;
+      font-size:11px;
+      color:var(--muted);
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .footer-links{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .footer a{
+      color:var(--accent-strong);
+      text-decoration:none;
+      border-bottom:1px dashed rgba(131,154,248,.6);
+      padding-bottom:1px;
+    }
+    .footer a:hover{
+      border-bottom-style:solid;
+    }
+
+    .footer-right{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      color:var(--muted);
+    }
+    .dot{
+      width:6px;
+      height:6px;
+      border-radius:999px;
+      background:#39d98a;
+      box-shadow:0 0 8px rgba(57,217,138,.9);
+    }
+
+    /* Cookie banner */
+    .cookie-banner{
+      position:fixed;
+      left:12px;
+      right:12px;
+      bottom:12px;
+      z-index:50;
+      background:#0c1024;
+      border:1px solid #222c54;
+      color:#e7ecf5;
+      border-radius:16px;
+      padding:11px 13px;
+      display:none;
+      box-shadow:0 18px 50px rgba(0,0,0,.8);
+      backdrop-filter:blur(20px);
+      -webkit-backdrop-filter:blur(20px);
+    }
+    .cookie-banner.show{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .cookie-banner p{
+      margin:0;
+      font-size:12px;
+      color:#a3afd7;
+    }
+    .cookie-actions{
+      margin-left:auto;
+      display:flex;
+      gap:7px;
+      flex-wrap:wrap;
+    }
+    .cookie-btn{
+      border:1px solid #262f5a;
+      background:#050816;
+      color:#e7ecf5;
+      padding:7px 11px;
+      border-radius:999px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .cookie-btn.primary{
+      background:#4f7dff;
+      border:none;
+      font-weight:600;
+      box-shadow:0 8px 24px rgba(15,30,90,.7);
+    }
+
+    @media(max-width:640px){
+      h1{font-size:22px;}
+      .hero{padding:22px 16px 16px;}
+      .panel{padding:14px 12px 12px;}
+      .footer{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:6px;
+      }
+    }
+  </style>
 </head>
 <body>
+<div class="page">
   <div class="wrap">
-    <div class="hero">
-      <h1>Any2Any File Converter</h1>
-      <div class="muted">Fast, private, and free. Files are processed temporarily and auto-deleted. We don’t store your files.</div>
+    <header>
+      <div class="brand">
+        <div class="brand-logo">
+          <span>A₂</span>
+        </div>
+        <div class="brand-text">
+          <div class="brand-text-title">Any2Any</div>
+          <div class="brand-text-sub">Smart Image &amp; PDF Converter</div>
+        </div>
+      </div>
 
-      <div class="grid">
-        <!-- Left: drop zone + progress/result -->
-        <div class="panel">
-          <div id="drop" class="drop" tabindex="0" aria-label="Drop file here">
-            <div>
-              <div style="font-weight:600;margin-bottom:6px;">Drag & drop a file</div>
-              <div class="muted">or</div><br/>
-              <div class="file-chooser">
-                <input id="file" type="file" aria-label="Choose file"/>
-                <button class="cta" type="button">Choose file</button>
+      <div class="header-pill">
+        <span class="tag">Private by design</span>
+        <span>Files are processed ephemerally and auto-deleted.</span>
+      </div>
+    </header>
+
+    <main class="hero">
+      <div class="hero-inner">
+        <div class="hero-headline">
+          <h1>
+            Turn photos &amp; PDFs into documents
+            <span class="sparkle">✨</span>
+          </h1>
+          <p class="muted">
+            Upload a file once and get what you actually need: a searchable PDF, an editable DOCX,
+            or clean images of each page. No sign-up. No tracking. No noisy ads.
+          </p>
+        </div>
+
+        <div class="hero-badges">
+          <div class="pill-soft">
+            <span>🔎</span>
+            <small>Image → searchable PDF (selectable text)</small>
+          </div>
+          <div class="pill-soft">
+            <span>✏️</span>
+            <small>Image → DOCX (fully editable)</small>
+          </div>
+          <div class="pill-soft">
+            <span>🧩</span>
+            <small>PDF → JPG/PNG (per-page ZIP)</small>
+          </div>
+          <div class="pill-soft">
+            <span>📄</span>
+            <small>PDF → DOCX (for editing)</small>
+          </div>
+        </div>
+
+        <div class="grid">
+          <!-- Left: drop zone + progress/result -->
+          <section class="panel">
+            <div class="panel-inner">
+              <div id="drop" class="drop" tabindex="0" aria-label="Drop file here">
+                <div>
+                  <div class="drop-title">Drop a file to get started</div>
+                  <div class="drop-sub">Image or PDF — we'll figure out the rest.</div>
+
+                  <div class="file-chooser">
+                    <input id="file" type="file" aria-label="Choose file"/>
+                    <button class="cta" type="button">
+                      <div class="cta-icon">⬆︎</div>
+                      <span>Choose a file</span>
+                    </button>
+                  </div>
+
+                  <div id="filemeta" class="filemeta" aria-live="polite"></div>
+                </div>
               </div>
-              <div id="filemeta" class="filemeta" aria-live="polite"></div>
+
+              <div class="progress">
+                <div id="bar" class="bar"></div>
+                <div id="barInd" class="bar" style="display:none"></div>
+              </div>
+              <div id="status" class="statusline"></div>
+              <div id="result" class="result"></div>
             </div>
-          </div>
+          </section>
 
-          <div class="progress">
-            <div id="bar" class="bar"></div>
-            <div id="barInd" class="bar" style="display:none"></div>
-          </div>
-          <div id="status" class="statusline"></div>
-          <div id="result" class="result"></div>
+          <!-- Right: targets / feature hints -->
+          <section class="panel">
+            <div class="panel-inner">
+              <div class="section-title">Target format</div>
+              <div id="chips" class="chips" aria-label="Suggested formats"></div>
+
+              <div class="row" style="margin-top:6px">
+                <select id="targetSelect" aria-label="All formats"></select>
+                <button id="convertBtn" class="convert" type="button" disabled>
+                  <span class="icon">⚡</span>
+                  <span>Convert</span>
+                </button>
+              </div>
+
+              <label class="toggle-row">
+                <input id="localToggle" type="checkbox"/>
+                <span>
+                  Process small images directly in my browser (beta).<br/>
+                  <span style="opacity:.8">
+                    For heavy OCR &amp; PDF work we use the server, then delete files after ~20 minutes.
+                  </span>
+                </span>
+              </label>
+
+              <div class="tips">
+                Popular flows:
+                <strong>Photo → PDF (searchable)</strong> •
+                <strong>Photo → DOCX (editable)</strong> •
+                PDF → <strong>JPG/PNG/WEBP ZIP</strong> •
+                PDF → <strong>DOCX</strong>
+              </div>
+
+              <div class="badge-grid">
+                <div class="mini-card">
+                  <div class="mini-card-label">Privacy</div>
+                  <div class="mini-card-main">
+                    <span>Files live in a temporary workspace, then expire automatically.</span>
+                  </div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-card-label">Quality</div>
+                  <div class="mini-card-main">
+                    <span>Tesseract OCR + tuned layout so text stays selectable and clean.</span>
+                  </div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-card-label">No account</div>
+                  <div class="mini-card-main">
+                    <span>Jump in, convert, download, and move on. No login walls.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
 
-        <!-- Right: targets -->
-        <div class="panel">
-          <div class="section-title">Target format</div>
-          <div id="chips" class="chips" aria-label="Suggested formats"></div>
-          <div class="row" style="margin-top:8px">
-            <select id="targetSelect" aria-label="All formats"></select>
-            <button id="convertBtn" class="convert" type="button" disabled>Convert</button>
+        <footer class="footer">
+          <div class="footer-links">
+            <span>© 2025 Any2Any</span>
+            <span>·</span>
+            <a href="/privacy">Privacy</a>
+            <span>·</span>
+            <a href="/cookies">Cookies</a>
+            <span>·</span>
+            <span>Files auto-delete after ~20 minutes.</span>
           </div>
-
-          <label class="row" style="margin-top:6px; gap:8px; color:#9ab0d6; font-size:13px;">
-            <input id="localToggle" type="checkbox"/>
-            Process in my browser (beta) — images & PDF→images
-          </label>
-
-          <div class="muted" style="margin-top:10px">
-            Tips: <strong>PDF→JPG/PNG/WEBP/DOCX</strong> • HEIC→JPG • DOCX→PDF • MP4→MP3 • VCF⇄CSV • SRT⇄VTT
+          <div class="footer-right">
+            <div class="dot"></div>
+            <span>Server running — ready when you are.</span>
           </div>
-        </div>
+        </footer>
       </div>
-
-      <div class="footer">
-        <span>© 2025 Any2Any</span> · <a href="/privacy">Privacy</a> · <a href="/cookies">Cookies</a> ·
-        <span>Files auto-delete after ~20 minutes.</span>
-      </div>
-    </div>
+    </main>
   </div>
+</div>
 
-  <!-- Cookie banner -->
-  <div id="cookieBanner" class="cookie-banner" role="dialog" aria-live="polite" aria-label="Cookie consent">
-    <p>We use a small cookie to remember your choice. No tracking, no ads. <a href="/cookies" class="link">Learn more</a>.</p>
-    <div class="cookie-actions">
-      <button id="cookieAccept" class="cookie-btn primary">Accept</button>
-      <button id="cookieDecline" class="cookie-btn" aria-label="Decline and continue">Decline</button>
-    </div>
+<!-- Cookie banner -->
+<div id="cookieBanner" class="cookie-banner" role="dialog" aria-live="polite" aria-label="Cookie consent">
+  <p>
+    We use a small cookie to remember your choice. No tracking pixels, no ads.
+    <a href="/cookies" class="link">Learn more</a>.
+  </p>
+  <div class="cookie-actions">
+    <button id="cookieAccept" class="cookie-btn primary">Accept</button>
+    <button id="cookieDecline" class="cookie-btn" aria-label="Decline and continue">Decline</button>
   </div>
+</div>
 
-  <!-- JS libs for local conversion -->
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<!-- JS libs for optional local conversion -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
-  <!-- App JS -->
-  <script src="/static/js/app.js"></script>
+<!-- App JS -->
+<script src="/static/js/app.js"></script>
 </body>
 </html>
