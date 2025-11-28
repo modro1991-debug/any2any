@@ -275,7 +275,9 @@
       cursor:pointer;
       width:100%;
       height:100%;
+      z-index: 2;          /* ⬅ put input on top */
     }
+
 
     .cta{
       display:inline-flex;
@@ -292,7 +294,9 @@
       box-shadow:0 10px 30px rgba(15,30,90,.8);
       position:relative;
       overflow:hidden;
+      z-index: 1;          /* ⬅ sit under the invisible input */
     }
+
     .cta::after{
       content:"";
       position:absolute;
@@ -727,16 +731,6 @@
                   <span>Convert</span>
                 </button>
               </div>
-
-              <label class="toggle-row">
-                <input id="localToggle" type="checkbox"/>
-                <span>
-                  Process small images directly in my browser (beta).<br/>
-                  <span style="opacity:.8">
-                    For heavy OCR &amp; PDF work we use the server, then delete files after ~20 minutes.
-                  </span>
-                </span>
-              </label>
 
               <div class="tips">
                 Popular flows:

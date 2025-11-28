@@ -8,7 +8,6 @@
   const chipsWrap = $("#chips");
   const targetSelect = $("#targetSelect");
   const convertBtn = $("#convertBtn");
-  const localToggle = $("#localToggle");
   const bar = $("#bar");
   const barInd = $("#barInd");
   const statusLine = $("#status");
@@ -225,23 +224,6 @@
     barInd.classList.remove("indeterminate");
 
     const srcExt = extOf(file.name);
-
-    // Local conversion path (only for simple image->image)
-    if (localToggle.checked && canDoLocal(srcExt, target)) {
-      try {
-        const t0 = performance.now();
-        const out = await convertLocal(file, srcExt, target);
-        const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
-        resultBox.innerHTML = `<span class="pill ok">Done</span> <a class="link" href="${out.url}" download="${escapeHtml(
-          out.filename
-        )}">Download ${escapeHtml(
-          out.filename
-        )}</a> <span class="muted">(⏱ ${elapsed}s)</span>`;
-        return;
-      } catch (err) {
-        console.warn("Local conversion failed, falling back to server:", err);
-      }
-    }
 
     // Server conversion path
     statusLine.textContent = "Uploading…";
