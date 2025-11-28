@@ -195,7 +195,6 @@
       opacity:.9;
     }
 
-    /* Main grid */
     .grid{
       display:grid;
       gap:18px;
@@ -275,9 +274,8 @@
       cursor:pointer;
       width:100%;
       height:100%;
-      z-index: 2;          /* ⬅ put input on top */
+      z-index:2; /* make input sit above button */
     }
-
 
     .cta{
       display:inline-flex;
@@ -294,9 +292,8 @@
       box-shadow:0 10px 30px rgba(15,30,90,.8);
       position:relative;
       overflow:hidden;
-      z-index: 1;          /* ⬅ sit under the invisible input */
+      z-index:1; /* under the invisible input */
     }
-
     .cta::after{
       content:"";
       position:absolute;
@@ -480,19 +477,6 @@
       box-shadow:none;
     }
 
-    .toggle-row{
-      margin-top:8px;
-      gap:8px;
-      color:var(--muted);
-      font-size:12px;
-      display:flex;
-      align-items:flex-start;
-    }
-    .toggle-row input{
-      margin-top:2px;
-      accent-color:var(--accent);
-    }
-
     .tips{
       margin-top:11px;
       font-size:12px;
@@ -503,7 +487,6 @@
       font-weight:600;
     }
 
-    /* Right panel extra content */
     .badge-grid{
       display:grid;
       grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
@@ -574,7 +557,6 @@
       box-shadow:0 0 8px rgba(57,217,138,.9);
     }
 
-    /* Cookie banner */
     .cookie-banner{
       position:fixed;
       left:12px;
@@ -676,7 +658,7 @@
           </div>
           <div class="pill-soft">
             <span>✏️</span>
-            <small>Image → DOCX (fully editable)</small>
+            <small>Image → DOCX (editable)</small>
           </div>
           <div class="pill-soft">
             <span>🧩</span>
@@ -768,6 +750,8 @@
           <div class="footer-links">
             <span>© 2025 Any2Any</span>
             <span>·</span>
+            <a href="/about">About</a>
+            <span>·</span>
             <a href="/privacy">Privacy</a>
             <span>·</span>
             <a href="/cookies">Cookies</a>
@@ -796,7 +780,7 @@
   </div>
 </div>
 
-<!-- JS libs for optional local conversion -->
+<!-- JS libs for optional local PDF→image (kept for future if you want) -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 

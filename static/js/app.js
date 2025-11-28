@@ -15,7 +15,7 @@
 
   // Supported formats for v1 (front-end view)
   const IMAGE_IN = ["jpg", "jpeg", "png", "webp", "tiff", "bmp"];
-  const DOC_IN   = ["pdf"];
+  const DOC_IN = ["pdf"];
 
   function extOf(name) {
     const m = /\.[^.]+$/.exec(name || "");
@@ -40,7 +40,7 @@
   }
 
   // Suggested targets based on v1 feature set
-  function suggestedTargets(ext, cat) {
+  function suggestedTargets(ext) {
     if (IMAGE_IN.includes(ext)) {
       // image -> PDF or DOCX
       return ["pdf", "docx"];
@@ -52,7 +52,7 @@
     return [];
   }
 
-  function allTargetsFor(ext, cat) {
+  function allTargetsFor(ext) {
     if (IMAGE_IN.includes(ext)) {
       return ["pdf", "docx"];
     }
@@ -68,14 +68,14 @@
     convertBtn.disabled = !(hasFile && hasTarget);
   }
 
-  function setSuggestions(ext, cat) {
+  function setSuggestions(ext) {
     chipsWrap.innerHTML = "";
-    const opts = allTargetsFor(ext, cat);
+    const opts = allTargetsFor(ext);
     targetSelect.innerHTML = opts
       .map((o) => `<option value="${o}">${o.toUpperCase()}</option>`)
       .join("");
 
-    const top = suggestedTargets(ext, cat).filter((x) => opts.includes(x));
+    const top = suggestedTargets(ext).filter((x) => opts.includes(x));
     top.forEach((fmt) => {
       const chip = document.createElement("button");
       chip.type = "button";
@@ -109,6 +109,11 @@
   }
 
   // ---------- UI events ----------
+  if (!drop || !fileInput || !convertBtn || !targetSelect) {
+    console.error("Any2Any: missing core elements in DOM");
+    return;
+  }
+
   targetSelect.addEventListener("change", enableConvertIfReady);
 
   // Drag & drop
@@ -132,6 +137,14 @@
     }
   });
 
+  // Ensure clicking on the visible button also opens dialog (backup)
+  const chooseBtn = document.querySelector(".cta");
+  if (chooseBtn) {
+    chooseBtn.addEventListener("click", () => {
+      fileInput?.click();
+    });
+  }
+
   // File picker change
   fileInput.addEventListener("change", () => {
     const f = fileInput.files?.[0];
@@ -148,7 +161,9 @@
 
     const ext = extOf(file.name);
     const cat = guessCategory(ext);
-    setSuggestions(ext, cat);
+    console.log("Picked file:", file.name, "ext:", ext, "cat:", cat);
+
+    setSuggestions(ext);
 
     filemeta.textContent = `${file.name} — ${ext.toUpperCase()} • ${humanSize(
       file.size
@@ -158,10 +173,16 @@
 
   // ---------- Convert click ----------
   convertBtn.addEventListener("click", () => {
-    if (convertBtn.disabled) return;
+    if (convertBtn.disabled) {
+      console.log("Convert clicked but disabled");
+      return;
+    }
     const file = fileInput.files?.[0];
     const target = targetSelect.value;
-    if (!file || !target) return;
+    if (!file || !target) {
+      console.log("No file or target when clicking convert");
+      return;
+    }
 
     resultBox.innerHTML = "";
     statusLine.textContent = "";
@@ -170,15 +191,13 @@
     barInd.classList.remove("indeterminate");
 
     const srcExt = extOf(file.name);
+    const cat = guessCategory(srcExt);
+    console.log("Starting convert:", { srcExt, target, cat });
 
-    // Server conversion path only
     statusLine.textContent = "Uploading…";
     const fd = new FormData();
     fd.append("file", file);
     fd.append("target", target);
-
-    // Category hint helps backend route image/doc correctly
-    const cat = guessCategory(srcExt);
     fd.append("category", cat);
 
     const xhr = new XMLHttpRequest();
@@ -201,7 +220,8 @@
 
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable) {
-        bar.style.width = Math.round((ev.loaded / ev.total) * 100) + "%";
+        const pct = Math.round((ev.loaded / ev.total) * 100);
+        bar.style.width = pct + "%";
       }
     };
     xhr.upload.onload = () => {
@@ -228,7 +248,8 @@
             }" download>Download ${escapeHtml(
               data.filename
             )}</a>${t}`;
-          } catch {
+          } catch (e) {
+            console.error("Failed to parse JSON response", e, xhr.responseText);
             statusLine.textContent = "Done.";
             resultBox.textContent = "Download ready.";
           }
@@ -238,6 +259,7 @@
             const data = JSON.parse(xhr.responseText);
             msg = data.detail || msg;
           } catch {}
+          console.error("Server error:", xhr.status, msg);
           resultBox.innerHTML = `<span class="pill err">Error</span> ${escapeHtml(
             msg
           )}`;
@@ -253,6 +275,7 @@
   const cb = document.getElementById("cookieBanner");
   const btnA = document.getElementById("cookieAccept");
   const btnD = document.getElementById("cookieDecline");
+
   function setCookie(name, value, days) {
     const maxAge = days * 24 * 60 * 60;
     document.cookie = `${name}=${encodeURIComponent(
@@ -267,22 +290,22 @@
       ?.split("=")[1];
   }
   function showBannerIfNeeded() {
-    if (!getCookie("consent")) {
+    if (!getCookie("consent") && cb) {
       cb.classList.add("show");
       cb.setAttribute("aria-hidden", "false");
     }
   }
   btnA?.addEventListener("click", () => {
     setCookie("consent", "accept", 180);
-    cb.classList.remove("show");
-    cb.setAttribute("aria-hidden", "true");
+    cb?.classList.remove("show");
+    cb?.setAttribute("aria-hidden", "true");
   });
   btnD?.addEventListener("click", () => {
-    cb.classList.remove("show");
-    cb.setAttribute("aria-hidden", "true");
+    cb?.classList.remove("show");
+    cb?.setAttribute("aria-hidden", "true");
   });
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && cb.classList.contains("show")) btnD.click();
+    if (e.key === "Escape" && cb?.classList.contains("show")) btnD?.click();
   });
   showBannerIfNeeded();
 })();
